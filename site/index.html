@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ECC Playbook — ابزار، اسکیل و پرامپت آماده برای هر خدمت</title>
+<meta name="description" content="برای هر نیاز — از ساخت سایت و داشبورد تا API، امنیت، کارایی و ایجنت — مسیر دقیق، اسکیل‌ها، دستورها و پرامپت‌های آماده از ریپوی affaan-m/ECC." />
+<meta name="color-scheme" content="light dark" />
+<meta property="og:title" content="ECC Playbook — مسیر و پرامپت آماده برای هر خدمت" />
+<meta property="og:description" content="۳۱۴ اسکیل، ۹۸ کامند و ۷۱ agent از ECC، نگاشت‌شده به نیاز واقعی شما." />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<link rel="canonical" href="./" />
+<link rel="stylesheet" href="assets/styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141110'/%3E%3Cpath d='M8 22 L14 10 L18 18 L21 13 L24 22' stroke='%23d9481f' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "ECC Playbook",
+  "inLanguage": "fa-IR",
+  "description": "نگاشت نیازهای مهندسی نرم‌افزار، معماری و طراحی سایت به اسکیل‌ها، دستورها و پرامپت‌های آمادهٔ ریپوی affaan-m/ECC",
+  "about": { "@type": "SoftwareSourceCode", "name": "ECC", "codeRepository": "https://github.com/affaan-m/ecc", "license": "https://opensource.org/licenses/MIT" }
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">پرش به محتوا</a>
+
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <a class="brand" href="#top" aria-label="ECC Playbook — خانه">
+      <span class="brand__mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="26" height="26"><rect width="32" height="32" rx="7" fill="currentColor"/><path d="M8 22 L14 10 L18 18 L21 13 L24 22" stroke="#d9481f" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="brand__text">
+        <strong>ECC Playbook</strong>
+        <span class="brand__sub">مسیر، ابزار و پرامپت برای هر خدمت</span>
+      </span>
+    </a>
+
+    <nav class="nav" aria-label="بخش‌ها">
+      <a href="#services">خدمت‌ها</a>
+      <a href="#playbook">مسیر و پرامپت</a>
+      <a href="#library">کتابخانه</a>
+      <a href="#install">نصب</a>
+    </nav>
+
+    <div class="topbar__actions">
+      <button class="btn btn--ghost btn--icon" id="themeToggle" type="button" aria-label="تغییر تم روشن/تاریک" title="تغییر تم">
+        <span class="theme-ico" aria-hidden="true">◐</span>
+      </button>
+      <button class="btn btn--ghost btn--icon" id="searchOpen" type="button" aria-label="جست‌وجوی سریع (کلید /)" title="جست‌وجو — کلید /">
+        <span aria-hidden="true">⌕</span>
+      </button>
+      <a class="btn btn--solid" href="https://github.com/affaan-m/ecc" target="_blank" rel="noopener">ریپوی ECC ↗</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ─────────────── HERO ─────────────── -->
+  <section class="hero" id="top">
+    <div class="wrap hero__inner">
+      <div class="hero__copy">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span> ساخته‌شده روی ECC نسخهٔ <span id="eccVersion">2.2.3</span> · لایسنس MIT</p>
+        <h1>بگو چه خدمتی لازم داری؛<br /><em>مسیر، ابزار و پرامپت</em> آماده است.</h1>
+        <p class="lede">
+          این سایت کاتالوگ ۳۱۴ اسکیل، ۹۸ دستور و ۷۱ agent ریپوی
+          <a href="https://github.com/affaan-m/ecc" target="_blank" rel="noopener">affaan-m/ecc</a> را به
+          نیاز واقعی شما نگاشت می‌کند: اگر می‌خواهید سایت بسازید، API بنویسید، امنیت را ببندید یا ایجنت راه بیندازید،
+          اینجا هم ترتیب کار را می‌بینید و هم پرامپتی که می‌توانید مستقیم کپی کنید.
+        </p>
+        <div class="hero__cta">
+          <a class="btn btn--solid btn--lg" href="#services">انتخاب خدمت</a>
+          <button class="btn btn--outline btn--lg" id="surpriseBtn" type="button">نمی‌دانم کدام؟ راهنما بده</button>
+        </div>
+        <dl class="counters" aria-label="آمار کاتالوگ">
+          <div><dt>اسکیل</dt><dd data-count="skills">۳۱۴</dd></div>
+          <div><dt>دستور</dt><dd data-count="commands">۹۸</dd></div>
+          <div><dt>agent</dt><dd data-count="agents">۷۱</dd></div>
+          <div><dt>مسیر خدمت</dt><dd id="pathCount">۱۵</dd></div>
+        </dl>
+      </div>
+
+      <div class="hero__panel" aria-hidden="true">
+        <div class="term">
+          <div class="term__bar"><span></span><span></span><span></span><em>~/project — ecc</em></div>
+          <pre class="term__body"><code><span class="c-dim"># ۱) کلون و نصب گزیده</span>
+<span class="c-prompt">$</span> git clone https://github.com/affaan-m/ecc.git
+<span class="c-prompt">$</span> cd ecc && ./install.sh <span class="c-flag">--profile developer</span> <span class="c-flag">--target claude</span>
+
+<span class="c-dim"># ۲) مسیر سایت را اجرا کن</span>
+<span class="c-prompt">›</span> /plan  <span class="c-str">"لندینگ محصول با RTL"</span>
+<span class="c-prompt">›</span> Skill: design-system
+<span class="c-prompt">›</span> Skill: frontend-design-direction
+<span class="c-prompt">›</span> /code-review
+
+<span class="c-ok">✓ 62 skills · 24 agents · 16 commands گزیده شد</span></code></pre>
+        </div>
+      </div>
+    </div>
+    <div class="hero__grid" aria-hidden="true"></div>
+  </section>
+
+  <!-- ─────────────── SERVICES ─────────────── -->
+  <section class="section" id="services">
+    <div class="wrap">
+      <div class="section__head">
+        <div>
+          <h2>چه کاری در پیش داری؟</h2>
+          <p class="section__sub">یک کارت را انتخاب کن تا مسیر گام‌به‌گام، اسکیل‌ها، دستورها و پرامپت‌های آمادهٔ همان کار باز شود.</p>
+        </div>
+        <div class="filter" role="group" aria-label="فیلتر موضوع">
+          <button class="chip is-active" data-tag="all" type="button">همه</button>
+          <button class="chip" data-tag="frontend" type="button">فرانت‌اند</button>
+          <button class="chip" data-tag="backend" type="button">بک‌اند</button>
+          <button class="chip" data-tag="design" type="button">طراحی</button>
+          <button class="chip" data-tag="data" type="button">داده</button>
+          <button class="chip" data-tag="ai" type="button">AI</button>
+          <button class="chip" data-tag="quality" type="button">کیفیت</button>
+          <button class="chip" data-tag="security" type="button">امنیت</button>
+          <button class="chip" data-tag="devops" type="button">دواپس</button>
+        </div>
+      </div>
+
+      <ul class="cards" id="serviceCards"></ul>
+    </div>
+  </section>
+
+  <!-- ─────────────── PLAYBOOK ─────────────── -->
+  <section class="section section--alt" id="playbook" aria-live="polite">
+    <div class="wrap">
+      <div class="section__head">
+        <div>
+          <p class="eyebrow eyebrow--tight">مسیر خدمت</p>
+          <h2 id="pbTitle">یک خدمت را انتخاب کن</h2>
+          <p class="section__sub" id="pbSummary">
+            از کارت‌های بالا یکی را انتخاب کنید تا این بخش با مراحل، ابزارها و پرامپت‌های آمادهٔ همان خدمت پر شود.
+          </p>
+        </div>
+        <div class="pb__actions" id="pbActions" hidden>
+          <button class="btn btn--outline" id="copyAllPrompts" type="button">کپی همهٔ پرامپت‌ها</button>
+          <a class="btn btn--ghost" id="pbGitHub" href="https://github.com/affaan-m/ecc" target="_blank" rel="noopener">منبع در ریپو ↗</a>
+        </div>
+      </div>
+
+      <div class="pb" id="pbEmpty">
+        <div class="pb__empty">
+          <p>۱۵ مسیر آماده است. پیشنهاد شروع:</p>
+          <div class="pb__suggest">
+            <button class="btn btn--chip" data-open="website" type="button">ساخت سایت</button>
+            <button class="btn btn--chip" data-open="webapp" type="button">داشبورد / SaaS</button>
+            <button class="btn btn--chip" data-open="api" type="button">بک‌اند و API</button>
+            <button class="btn btn--chip" data-open="harness" type="button">نصب روی پروژهٔ خودم</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pb" id="pbBody" hidden>
+        <div class="pb__meta" id="pbMeta"></div>
+
+        <div class="pb__grid">
+          <div class="pb__col pb__col--steps">
+            <h3 class="pb__h">مراحل کار</h3>
+            <ol class="steps" id="pbSteps"></ol>
+          </div>
+
+          <div class="pb__col">
+            <h3 class="pb__h">جعبه‌ابزار این مسیر</h3>
+            <div class="toolbox" id="pbToolbox"></div>
+
+            <h3 class="pb__h">نصب سریع</h3>
+            <div class="cmd">
+              <code id="pbInstall"></code>
+              <button class="cmd__copy" data-copy-target="pbInstall" type="button" aria-label="کپی دستور نصب">کپی</button>
+            </div>
+
+            <h3 class="pb__h">خروجی مورد انتظار</h3>
+            <p class="deliverable" id="pbDeliverable"></p>
+          </div>
+        </div>
+
+        <h3 class="pb__h">پرامپت‌های آماده <span class="hint">— کپی کن، جای {…} را پر کن</span></h3>
+        <div class="prompts" id="pbPrompts"></div>
+
+        <h3 class="pb__h">تله‌های رایج</h3>
+        <ul class="pitfalls" id="pbPitfalls"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────── LIBRARY ─────────────── -->
+  <section class="section" id="library">
+    <div class="wrap">
+      <div class="section__head">
+        <div>
+          <p class="eyebrow eyebrow--tight">کتابخانهٔ کامل</p>
+          <h2>همهٔ <span id="libTotal">۴۸۳</span> جزء ECC</h2>
+          <p class="section__sub">جست‌وجو کن و نام دقیق را کپی کن؛ همین نام‌ها در اسکیل/دستور/agent استفاده می‌شوند.</p>
+        </div>
+        <div class="lib__controls">
+          <label class="srch">
+            <span class="srch__ico" aria-hidden="true">⌕</span>
+            <input id="libSearch" type="search" placeholder="مثلاً: react، security، migration…" autocomplete="off" aria-label="جست‌وجو در کتابخانه" />
+            <kbd>/</kbd>
+          </label>
+          <div class="tabs" role="group" aria-label="نوع جزء">
+            <button class="tab is-active" aria-pressed="true" data-lib="skills" type="button">اسکیل‌ها <span id="tabCountSkills"></span></button>
+            <button class="tab" aria-pressed="false" data-lib="commands" type="button">دستورها <span id="tabCountCommands"></span></button>
+            <button class="tab" aria-pressed="false" data-lib="agents" type="button">agentها <span id="tabCountAgents"></span></button>
+          </div>
+        </div>
+      </div>
+      <p class="lib__status" id="libStatus" role="status"></p>
+      <ul class="lib" id="libList"></ul>
+      <button class="btn btn--outline lib__more" id="libMore" type="button" hidden>نمایش بیشتر</button>
+    </div>
+  </section>
+
+  <!-- ─────────────── INSTALL ─────────────── -->
+  <section class="section section--alt" id="install">
+    <div class="wrap">
+      <div class="install">
+        <div class="install__copy">
+          <p class="eyebrow eyebrow--tight">شروع</p>
+          <h2>سه قدم تا اجرا</h2>
+          <ol class="num-list">
+            <li><strong>کلون</strong> ریپو (یا نصب به‌عنوان پلاگین Claude Code).</li>
+            <li><strong>پروفایل</strong> را انتخاب کن: <code>minimal</code> برای context سبک، <code>developer</code> برای کار روی کد، <code>full</code> برای همه‌چیز. hookها تصمیم صریح می‌خواهند: <code>--enable-hooks</code> یا <code>--no-hooks</code>.</li>
+            <li><strong>مسیر خدمت</strong> را از بالا باز کن و پرامپت‌های همان کار را اجرا کن.</li>
+          </ol>
+          <p class="note">برای هارنس‌های دیگر: <code>--target cursor</code>، <code>opencode</code>، <code>gemini</code>، <code>zed</code>، <code>copilot</code>، <code>qwen</code>، <code>kimi</code> و …</p>
+        </div>
+        <div class="install__code">
+          <div class="cmd cmd--stack">
+            <code>git clone https://github.com/affaan-m/ecc.git &amp;&amp; cd ecc</code>
+            <button class="cmd__copy" data-copy-text="git clone https://github.com/affaan-m/ecc.git && cd ecc" type="button">کپی</button>
+          </div>
+          <div class="cmd cmd--stack">
+            <code>./install.sh --profile developer --target claude</code>
+            <button class="cmd__copy" data-copy-text="./install.sh --profile developer --target claude" type="button">کپی</button>
+          </div>
+          <div class="cmd cmd--stack">
+            <code>./install.sh --target claude --skills tdd-workflow,api-design,design-system</code>
+            <button class="cmd__copy" data-copy-text="./install.sh --target claude --skills tdd-workflow,api-design,design-system" type="button">کپی</button>
+          </div>
+          <p class="note note--small">بدون نصب هم می‌توانید هر <code>skills/&lt;name&gt;/SKILL.md</code> را مستقیم استفاده کنید.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot__inner">
+    <p>
+      محتوا از <a href="https://github.com/affaan-m/ecc" target="_blank" rel="noopener">affaan-m/ecc</a> نسخهٔ <span id="footVersion">2.2.3</span> ·
+      لایسنس MIT © Affaan Mustafa · این صفحه یک نمای مستقل است و وابسته به پروژهٔ ECC نیست.
+    </p>
+    <p class="foot__meta">
+      دادهٔ کاتالوگ: <code>site/assets/data.js</code> — بازتولید با <code>node site/tools/gen-data.mjs --src ../ecc</code>
+    </p>
+  </div>
+</footer>
+
+<!-- Command palette -->
+<div class="palette" id="palette" hidden>
+  <div class="palette__backdrop" data-close-palette></div>
+  <div class="palette__box" role="dialog" aria-modal="true" aria-label="جست‌وجوی سریع">
+    <div class="palette__input">
+      <span aria-hidden="true">⌕</span>
+      <input id="paletteInput" type="text" placeholder="نام اسکیل، دستور یا خدمت…" aria-label="جست‌وجوی سریع" />
+      <kbd>Esc</kbd>
+    </div>
+    <ul class="palette__list" id="paletteList"></ul>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="assets/playbooks.js"></script>
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
