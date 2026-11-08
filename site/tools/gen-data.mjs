@@ -13,7 +13,7 @@ const arg = (name, def) => {
 };
 
 const SRC = resolve(arg("src", join(here, "..", "..", "..", "ecc")));
-const OUT = resolve(arg("out", join(here, "..", "assets", "data.js")));
+const OUT = resolve(arg("out", join(here, "..", "assets", "data.json")));
 
 if (!existsSync(join(SRC, "skills"))) {
   console.error(`[gen-data] skills/ پیدا نشد در: ${SRC}\n  از --src /path/to/ecc استفاده کنید.`);
@@ -73,11 +73,5 @@ const payload = {
   agents,
 };
 
-writeFileSync(
-  OUT,
-  "/* ساخته‌شده با site/tools/gen-data.mjs — از ریپوی affaan-m/ecc (MIT). دستی ویرایش نکنید. */\n" +
-    "window.ECC_DATA = " +
-    JSON.stringify(payload, null, 0) +
-    ";\n"
-);
+writeFileSync(OUT, JSON.stringify(payload, null, 0) + "\n");
 console.log(`[gen-data] ${payload.counts.skills} skills, ${payload.counts.commands} commands, ${payload.counts.agents} agents → ${OUT}`);

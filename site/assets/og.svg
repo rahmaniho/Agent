@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="ECC Playbook — مسیر، ابزار و پرامپت آماده برای هر خدمت">
+  <defs>
+    <pattern id="g" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M60 0H0V60" fill="none" stroke="#2b2620" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="#f6f2ea"/>
+  <rect width="1200" height="630" fill="url(#g)" opacity=".55"/>
+  <rect x="0" y="0" width="1200" height="630" fill="none" stroke="#ded4c4" stroke-width="10"/>
+  <g transform="translate(84,96)">
+    <rect width="46" height="46" rx="10" fill="#16130f"/>
+    <path d="M11 33 L20 13 L26 26 L30.5 18 L35 33" fill="none" stroke="#ff7a45" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="62" y="22" font-family="Vazirmatn, system-ui, sans-serif" font-size="24" font-weight="700" fill="#16130f">ECC Playbook</text>
+    <text x="62" y="46" font-family="Vazirmatn, system-ui, sans-serif" font-size="14" fill="#6b6257">مسیر، ابزار و پرامپت برای هر خدمت</text>
+  </g>
+  <text x="84" y="300" font-family="Vazirmatn, system-ui, sans-serif" font-size="66" font-weight="700" fill="#16130f">بگو چه خدمتی لازم داری؛</text>
+  <text x="84" y="382" font-family="Vazirmatn, system-ui, sans-serif" font-size="66" font-weight="700" fill="#c2410c">مسیر، ابزار و پرامپت آماده است.</text>
+  <g font-family="JetBrains Mono, ui-monospace, monospace" font-size="26" fill="#3b342c">
+    <text x="84" y="470">314 skills</text>
+    <text x="240" y="470">98 commands</text>
+    <text x="440" y="470">71 agents</text>
+    <text x="600" y="470">38 prompts</text>
+  </g>
+  <text x="84" y="545" font-family="Vazirmatn, system-ui, sans-serif" font-size="18" fill="#6b6257">ساخته‌شده روی affaan-m/ecc · MIT</text>
+</svg>

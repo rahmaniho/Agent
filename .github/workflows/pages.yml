@@ -1,0 +1,66 @@
+name: Deploy ECC Playbook to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate static assets
+        run: |
+          set -euo pipefail
+          node --check site/assets/app.js
+          node --check site/assets/sw.js
+          for f in site/assets/data.json site/assets/playbooks.json site/assets/manifest.webmanifest; do
+            node -e "JSON.parse(require('fs').readFileSync('$f','utf8')); console.log('valid JSON: $f')"
+          done
+          test -f site/index.html
+          node -e "
+            const data=require('./site/assets/data.json');
+            const {services}=require('./site/assets/playbooks.json');
+            const pools={skills:new Set(data.skills.map(x=>x.name)),commands:new Set(data.commands.map(x=>x.name)),agents:new Set(data.agents.map(x=>x.name))};
+            const missing=[];
+            for (const s of services) for (const k of ['skills','commands','agents']) for (const n of (s[k]||[])) if (!pools[k].has(n)) missing.push(k+':'+n+':'+s.id);
+            if (missing.length) { console.error('Unknown refs:', missing.join(', ')); process.exit(1); }
+            console.log('refs OK:', services.length, 'services');
+          "
+
+      - name: Add CNAME if configured
+        if: vars.PAGES_CUSTOM_DOMAIN != ''
+        run: echo "${{ vars.PAGES_CUSTOM_DOMAIN }}" > site/CNAME
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
