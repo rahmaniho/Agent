@@ -75,3 +75,67 @@ test('agent lists and opens sessions, sends once and stops using the active run 
     await waitFor(() => $('#agentStop').disabled && $('#agentStatus').textContent.includes('متوقف شده'));
   } finally { dom.window.close(); }
 });
+
+test('all project paths have plain-language needs and library categories show mapped tools', async () => {
+  const dom = page(), w = dom.window, $ = s => w.document.querySelector(s);
+  w.fetch = async url => ({ ok:true, json:async () => url.endsWith('playbooks.json') ? playbooks : data });
+  w.eval(app);
+  try {
+    await waitFor(() => $('#libCategory').options.length === playbooks.services.length + 2);
+    for (const service of playbooks.services) {
+      w.location.hash = `#/s/${service.id}`;
+      await waitFor(() => $('#pbTitle').textContent === service.title);
+      assert.ok($('#pbNeeds').textContent.length > 20, service.id);
+      assert.ok(service.steps.every(step => step.simpleTitle));
+    }
+    w.location.hash = '#/library';
+    await waitFor(() => !$('[data-view=library]').hidden);
+    $('#libCategory').value = 'website'; $('#libCategory').dispatchEvent(new w.Event('change'));
+    const visible = [...$('#libList').querySelectorAll('button[data-copy-text]')].map(el => el.dataset.copyText);
+    assert.deepEqual(visible.sort(), playbooks.services.find(s => s.id === 'website').skills.slice().sort());
+    assert.equal(w.document.querySelectorAll('a[href*="github.com"]').length, 0);
+  } finally { dom.window.close(); }
+});
+
+const workspaceSource = await readFile(new URL('src/workspace.js', site), 'utf8');
+test('login is first; guest can browse and a non-admin cannot see management controls', async () => {
+  const dom = page(), w = dom.window, $ = s => w.document.querySelector(s);
+  const session = {user:{id:'user-1',email:'person@example.test'}};
+  let onAuth; const calls = [];
+  const client = {
+    auth:{onAuthStateChange: fn => { onAuth=fn; }, getSession: async () => ({data:{session:null}}), signInWithPassword: async () => {onAuth('SIGNED_IN',session); return {error:null};}, signUp: async () => ({data:{session:null}}), signOut: async()=>({error:null})},
+    rpc: async name => {calls.push(name); return {data:[{is_admin:false,plan:'free',expires_at:null}]};},
+    from: () => ({select: () => ({order: () => ({order: () => ({range: async () => ({data:[],error:null})})})})})
+  };
+  w.__client=client;
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(() => $('#authStatus').textContent === '');
+    assert.equal($('#loginGate').hidden, false);
+    $('#guestAccess').click(); assert.equal($('#loginGate').hidden, true);
+    $('#openLogin').click(); assert.equal($('#loginGate').hidden, false);
+    $('#authEmail').value='person@example.test'; $('#authPassword').value='password';
+    $('#authForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    await waitFor(() => $('#accountPlan').textContent === 'رایگان');
+    assert.equal($('#loginGate').hidden,true); assert.equal($('#adminContent').hidden,true);
+    assert.equal(calls.includes('studio_admin_users'),false);
+  } finally {dom.window.close();}
+});
+
+test('admin can submit a manual subscription change through the authorized RPC', async () => {
+  const dom = page(), w=dom.window, $=s=>w.document.querySelector(s);
+  const session={user:{id:'admin-1',email:'admin@example.test'}}; const calls=[];
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},
+    rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]}; if(name==='studio_admin_users') return {data:[{user_id:'user-1',email:'member@example.test',plan:'free',expires_at:null}]}; return {data:null,error:null};},
+    from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.confirm=()=>true;
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#adminContent').hidden);
+    $('#adminUsers input').value='2099-01-01'; $('#adminUsers button').click();
+    await waitFor(()=>calls.some(c=>c.name==='studio_set_subscription'));
+    const call=calls.find(c=>c.name==='studio_set_subscription');
+    assert.equal(call.args.target_user,'user-1'); assert.equal(call.args.target_plan,'plus'); assert.match(call.args.target_expiry,/2099-01-01/);
+    await waitFor(() => calls.filter(c => c.name === 'studio_admin_users').length === 2 && !$('#adminContent').hidden);
+  } finally {dom.window.close();}
+});
