@@ -430,6 +430,13 @@ const LIB_REVIEW = {
   "code-reviewer": ["advanced", "یک دستیار تخصصی برای بررسی کیفیت، امنیت و نگهداری کد است."],
   "seo-specialist": ["advanced", "یک دستیار تخصصی برای بررسی فنی و محتوایی بهینه‌سازی جست‌وجو است."],
 };
+// Premium descriptions travel only with the authorized catalog RPC, never as public assets.
+function libraryReview(item) {
+  const local = Object.hasOwn(LIB_REVIEW, item.name) ? LIB_REVIEW[item.name] : null;
+  const level = item.level === "beginner" || item.level === "advanced" ? item.level : local?.[0] || "unknown";
+  const description = typeof item.description_fa === "string" && item.description_fa.trim() ? item.description_fa : local?.[1];
+  return [level, description];
+}
 const favoriteKey = "studio-library-favorites-v1";
 function readLibraryFavorites() { try { const value=JSON.parse(localStorage.getItem(favoriteKey)||"[]"); return new Set(Array.isArray(value) ? value.filter(x=>typeof x==="string") : []); } catch {return new Set();} }
 let libraryFavorites = readLibraryFavorites();
@@ -441,12 +448,12 @@ function renderLibrary() {
   const filtered = list.filter((x) => {
     if (mine && !mine.has(x.name)) return false;
     if (state.libFavorites && !libraryFavorites.has(`${state.libKind}:${x.name}`)) return false;
-    if (state.libLevel !== "all" && (LIB_REVIEW[x.name]?.[0] || "unknown") !== state.libLevel) return false;
+    if (state.libLevel !== "all" && libraryReview(x)[0] !== state.libLevel) return false;
     const paths = state.services.filter(s => (s[state.libKind] || []).includes(x.name));
     if (state.libCategory === "other" && paths.length) return false;
     if (state.libCategory !== "all" && state.libCategory !== "other" && !paths.some(s => s.id === state.libCategory)) return false;
     if (!q) return true;
-    const haystack = normalize([x.name, x.desc, LIB_REVIEW[x.name]?.[1], ...paths.map(p => p.title)].join(" "));
+    const haystack = normalize([x.name, x.desc, libraryReview(x)[1], ...paths.map(p => p.title)].join(" "));
     return q.trim().split(/\s+/).every(term => haystack.includes(term));
   });
   const slice = filtered.slice(0, state.libLimit);
@@ -459,7 +466,7 @@ function renderLibrary() {
         <span class="mark" aria-hidden="true">${state.libKind === "commands" ? "/" : state.libKind === "agents" ? "@" : "◇"}</span>${esc(toolLabel(x.name))}
       </button>
       <button type="button" class="library-favorite" data-favorite="${esc(x.name)}" aria-pressed="${libraryFavorites.has(`${state.libKind}:${x.name}`)}">${libraryFavorites.has(`${state.libKind}:${x.name}`) ? "★ حذف از علاقه‌مندی" : "☆ افزودن به علاقه‌مندی"}</button>
-      <p class="lib__desc">${esc(LIB_REVIEW[x.name]?.[1] || (state.libKind === "skills" ? "یک راهنمای تخصصی برای انجام این نوع کار است؛ توضیح دقیق آن هنوز به فارسی بررسی نشده است." : state.libKind === "commands" ? "دستوری آماده برای انجام یک کار مشخص است؛ توضیح دقیق فارسی هنوز بررسی نشده است." : "یک دستیار تخصصی برای انجام وظیفه‌ای مشخص است؛ توضیح دقیق فارسی هنوز بررسی نشده است."))} <small>سطح: ${{beginner:"شروع",advanced:"پیشرفته"}[LIB_REVIEW[x.name]?.[0]] || "ارزیابی‌نشده"}</small></p>
+      <p class="lib__desc">${esc(libraryReview(x)[1] || (state.libKind === "skills" ? "یک راهنمای تخصصی برای انجام این نوع کار است؛ توضیح دقیق آن هنوز به فارسی بررسی نشده است." : state.libKind === "commands" ? "دستوری آماده برای انجام یک کار مشخص است؛ توضیح دقیق فارسی هنوز بررسی نشده است." : "یک دستیار تخصصی برای انجام وظیفه‌ای مشخص است؛ توضیح دقیق فارسی هنوز بررسی نشده است."))} <small>سطح: ${{beginner:"شروع",advanced:"پیشرفته"}[libraryReview(x)[0]] || "ارزیابی‌نشده"}</small></p>
       <p class="lib__desc">${(() => { const paths = state.services.filter(s => (s[state.libKind] || []).includes(x.name)); return paths.length ? `پیشنهاد شده برای: ${paths.map(p => `<a href="#/s/${esc(p.id)}">${esc(p.title)}</a>`).join("، ")}` : "هنوز به مسیری در این برنامه اضافه نشده است."; })()}</p>
       <details class="original-desc"><summary>توضیح اصلی به زبان انگلیسی</summary><p dir="ltr">${esc(cleanSource(x.desc || "—"))}</p></details>
     </li>`

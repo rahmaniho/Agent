@@ -11,7 +11,7 @@ const data = JSON.parse(await readFile(new URL('assets/data.json', site), 'utf8'
 const playbooks = JSON.parse(await readFile(new URL('assets/playbooks.json', site), 'utf8'));
 // Synthetic gated payload: exercises access transitions without storing paid material in Git.
 const fullData = structuredClone(data);
-fullData.skills.push({name:'synthetic-premium-tool',desc:'Synthetic test-only tool.'},{name:'configure-ecc',desc:'Synthetic test-only identifier.'});
+fullData.skills.push({name:'synthetic-premium-tool',desc:'Synthetic test-only tool.',description_fa:'ابزار آزمایشی داده',level:'beginner'},{name:'configure-ecc',desc:'Synthetic test-only identifier.'});
 fullData.counts.skills = fullData.skills.length;
 const fullPlaybooks = structuredClone(playbooks);
 for (const service of fullPlaybooks.services) delete service.sample;
@@ -645,5 +645,54 @@ test('manager can page through requests and change the status filter', async () 
     await waitFor(()=>calls.some(c=>c.name==='studio_admin_purchases_v3' && c.args.filter_status==='rejected'));
     assert.equal(calls.filter(c=>c.name==='studio_admin_purchases_v3').at(-1).args.page_offset,0);
     await waitFor(()=>$('#adminPurchaseStatus').textContent.includes('درخواستی در این صفحه'));
+  } finally {dom.window.close();}
+});
+
+
+test('premium Persian metadata supports searching and level filtering without persisting', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});w.eval(app);
+  try {
+    w.location.hash='#/library'; await waitFor(()=>!$('[data-view=library]').hidden && $('#libList li'));
+    w.dispatchEvent(new w.CustomEvent('studio:catalog',{detail:{catalog:fullData,playbooks:fullPlaybooks}}));
+    await waitFor(()=>$('#libraryPaywall').hidden);
+    $('#libSearch').value='ابزار آزمایشی داده'; $('#libSearch').dispatchEvent(new w.Event('input'));
+    assert.match($('#libList').textContent,/synthetic-premium-tool/);
+    $('#libLevel').value='beginner'; $('#libLevel').dispatchEvent(new w.Event('change')); assert.match($('#libList').textContent,/ابزار آزمایشی داده/);
+    $('#libLevel').value='advanced'; $('#libLevel').dispatchEvent(new w.Event('change')); assert.equal($('#libList').children.length,0);
+    w.dispatchEvent(new w.CustomEvent('studio:catalog',{detail:null})); await waitFor(()=>!$('#libraryPaywall').hidden);
+    assert.doesNotMatch($('#libList').textContent,/synthetic-premium-tool|ابزار آزمایشی داده/);
+    assert.doesNotMatch(JSON.stringify(w.localStorage),/synthetic-premium-tool/);
+  } finally {dom.window.close();}
+});
+
+test('restore SQL is private, validates input and rolls back by default', async () => {
+  const {mkdtemp,writeFile,readFile,stat,rm}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os'); const {join}=await import('node:path');
+  const {spawnSync}=await import('node:child_process');
+  const dir=await mkdtemp(join(tmpdir(),'studio-restore-test-'));
+  try {
+    const input=join(dir,'backup.json'), output=join(dir,'restore.sql');
+    await writeFile(input,JSON.stringify({format:'agent-studio-catalog-v1',catalog:data,playbooks,postgres_jsonb_md5:{catalog:'0'.repeat(32),playbooks:'1'.repeat(32)}}));
+    const script=new URL('tools/prepare-catalog-restore.mjs',site).pathname;
+    let result=spawnSync(process.execPath,[script,'--input',input,'--out',output],{encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr);
+    assert.match(await readFile(output,'utf8'),/rollback;\s*$/); assert.equal((await stat(output)).mode & 0o777,0o600);
+    result=spawnSync(process.execPath,[script,'--input',input,'--out',output],{encoding:'utf8'}); assert.notEqual(result.status,0);
+    result=spawnSync(process.execPath,[script,'--input',input,'--out',new URL('assets/restore.sql',site).pathname],{encoding:'utf8'}); assert.notEqual(result.status,0);
+    await writeFile(input,JSON.stringify({format:'invalid'}));
+    result=spawnSync(process.execPath,[script,'--input',input,'--out',join(dir,'bad.sql')],{encoding:'utf8'}); assert.notEqual(result.status,0);
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test('premium descriptions are rendered as text, not HTML', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  const unsafe=structuredClone(fullData); unsafe.skills.at(-2).description_fa='<img src=x onerror=alert(1)> متن';
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});w.eval(app);
+  try {
+    w.location.hash='#/library'; await waitFor(()=>!$('[data-view=library]').hidden && $('#libList li'));
+    w.dispatchEvent(new w.CustomEvent('studio:catalog',{detail:{catalog:unsafe,playbooks:fullPlaybooks}})); await waitFor(()=>$('#libraryPaywall').hidden);
+    $('#libSearch').value='synthetic-premium-tool';$('#libSearch').dispatchEvent(new w.Event('input'));
+    assert.equal($('#libList').querySelector('img'),null); assert.match($('#libList').textContent,/<img src=x onerror=alert\(1\)>/);
   } finally {dom.window.close();}
 });
