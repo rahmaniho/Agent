@@ -27,8 +27,11 @@ jobs:
         run: |
           set -euo pipefail
           node --check site/assets/app.js
-          node --check site/assets/sw.js
-          for f in site/assets/data.json site/assets/playbooks.json site/assets/manifest.webmanifest; do
+          node --check site/sw.js
+          node --check site/assets/lazy.js
+          node --check site/assets/agent.js
+          node --check site/assets/workspace.js
+          for f in site/assets/data.json site/assets/playbooks.json site/manifest.webmanifest; do
             node -e "JSON.parse(require('fs').readFileSync('$f','utf8')); console.log('valid JSON: $f')"
           done
           test -f site/index.html
@@ -41,6 +44,11 @@ jobs:
             if (missing.length) { console.error('Unknown refs:', missing.join(', ')); process.exit(1); }
             console.log('refs OK:', services.length, 'services');
           "
+
+      - name: Test application and local bridge
+        run: |
+          npm ci --prefix site
+          npm test --prefix site
 
       - name: Add CNAME if configured
         if: vars.PAGES_CUSTOM_DOMAIN != ''

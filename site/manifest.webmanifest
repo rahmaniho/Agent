@@ -1,14 +1,14 @@
 {
-  "name": "ECC Playbook",
-  "short_name": "ECC Playbook",
+  "name": "Agent Studio",
+  "short_name": "Agent Studio",
   "description": "مسیر، ابزار و پرامپت آماده برای هر خدمت مهندسی نرم‌افزار، معماری و طراحی سایت",
   "lang": "fa-IR",
   "dir": "rtl",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f6f2ea",
-  "theme_color": "#16130f",
+  "background_color": "#f5f7f5",
+  "theme_color": "#1b3e36",
   "icons": [
     {
       "src": "assets/favicon.svg",
