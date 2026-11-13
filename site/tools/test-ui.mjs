@@ -108,7 +108,7 @@ test('all project paths have plain-language needs and library categories show ma
 });
 
 const workspaceSource = await readFile(new URL('src/workspace.js', site), 'utf8');
-test('login is first; guest can browse and a non-admin cannot see management controls', async () => {
+test('home opens without login and authentication opens only on request', async () => {
   const dom = page(), w = dom.window, $ = s => w.document.querySelector(s);
   const session = {user:{id:'user-1',email:'person@example.test'}};
   let onAuth; const calls = [];
@@ -121,13 +121,14 @@ test('login is first; guest can browse and a non-admin cannot see management con
   w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
   try {
     await waitFor(() => $('#authStatus').textContent === '');
-    assert.equal($('#loginGate').hidden, false);
+    assert.equal($('#loginGate').hidden, true);
+    $('#headerLogin').click(); assert.equal($('#loginGate').hidden, false);
     $('#guestAccess').click(); assert.equal($('#loginGate').hidden, true);
     $('#openLogin').click(); assert.equal($('#loginGate').hidden, false);
     $('#authEmail').value='person@example.test'; $('#authPassword').value='password';
     $('#authForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
     await waitFor(() => $('#accountPlan').textContent === 'رایگان');
-    assert.equal($('#loginGate').hidden,true); assert.equal($('#adminContent').hidden,true);
+    await waitFor(() => $('#loginGate').hidden); assert.equal($('#adminContent').hidden,true);
     assert.equal(calls.includes('studio_admin_users'),false);
   } finally {dom.window.close();}
 });
@@ -194,7 +195,7 @@ test('a signed-in customer submits a manual payment reference', async () => {
   w.__client=client;
   w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
   try {
-    await waitFor(()=>!$('#purchaseForm').hidden);
+    await waitFor(()=>!$('#purchaseFields').disabled);
     $('#purchaseReference').value='receipt 123';
     $('#purchasePayerEmail').value='payer@example.test'; $('#purchaseDate').value='2999-01-02'; $('#purchaseTime').value='09:15';
     $('#purchaseForm').reportValidity=()=>true; Object.defineProperty($('#purchaseReceipt'), 'files', {value:[new w.File(['png'], 'receipt.png', {type:'image/png'})]});
@@ -210,7 +211,7 @@ test('a signed-in customer submits a manual payment reference', async () => {
     const link=new URL(email.href); assert.equal(link.protocol,'mailto:'); assert.equal(link.pathname,'rahmani.hosseine@gmail.com');
     const body=link.searchParams.get('body'); assert.match(body,/receipt 123/); assert.match(body,/payer@example.test/); assert.match(body,/تومان/); assert.match(body,/زمان جهانی/);
     assert.equal(calls.some(c=>c.name==='studio_premium_catalog'),false);
-    onAuth('SIGNED_OUT',null); await waitFor(()=>$('#purchaseForm').hidden);
+    onAuth('SIGNED_OUT',null); await waitFor(()=>$('#purchaseFields').disabled);
   } finally {dom.window.close();}
 });
 
@@ -311,15 +312,18 @@ test('app-owned screens and sharing metadata omit source names while tool IDs re
   } finally {dom.window.close();}
 });
 
-test('plans are visible before sign-in and customer can return to free account creation', async () => {
+test('home links to a separate subscription form and sign-in is explicit', async () => {
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
   const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:null}})},rpc:async()=>({data:[]}),from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
-  w.__client=client;
-  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
   try {
-    await waitFor(()=>$('#authStatus').textContent==='');
-    assert.equal($('#loginGate').hidden,false); assert.match($('.entry-plans').textContent,/رایگان/); assert.match($('.entry-plans').textContent,/۹۹۰٬۰۰۰/);
-    $('#entryPlans').click(); assert.equal($('#loginGate').hidden,true); assert.equal(w.location.hash,'#/plans');
+    await waitFor(()=>!$('[data-view=home]').hidden); assert.equal($('#loginGate').hidden,true);
+    assert.match($('.home-subscription').textContent,/۹۹۰٬۰۰۰/);
+    assert.ok($('[data-view=home] #purchaseForm')); assert.equal($('#purchaseFields').disabled,true);
+    assert.equal($('.home-subscription a').getAttribute('href'),'#/subscribe');
+    w.location.hash='#/subscribe'; await waitFor(()=>!$('[data-view=subscribe]').hidden);
+    assert.ok($('[data-view=subscribe] #purchaseForm')); assert.equal($('[data-view=plans] #purchaseForm'),null);
     $('#purchaseOpenLogin').click(); assert.equal($('#loginGate').hidden,false); assert.match($('#signUp').textContent,/رایگان/);
   } finally {dom.window.close();}
 });
@@ -331,7 +335,7 @@ test('invalid receipt and upload failures do not submit a purchase', async () =>
   w.__client=client;
   w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
   try {
-    await waitFor(()=>!$('#purchaseForm').hidden); $('#purchaseForm').reportValidity=()=>true;
+    await waitFor(()=>!$('#purchaseFields').disabled); $('#purchaseForm').reportValidity=()=>true;
     $('#purchaseReference').value='ref123'; $('#purchasePayerEmail').value='payer@example.test'; $('#purchaseDate').value='2024-01-02'; $('#purchaseTime').value='09:15';
     let file=new w.File(['bad'],'bad.txt',{type:'text/plain'}); Object.defineProperty($('#purchaseReceipt'),'files',{get:()=>[file]});
     $('#purchaseForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); assert.match($('#purchaseStatus').textContent,/JPG/);
@@ -364,7 +368,7 @@ test('uploaded brand is used in the interface, browser icon and install manifest
   try {
     assert.equal(document.querySelector('.login-brand-icon').getAttribute('src'), 'assets/brand-icon-192.png');
     assert.equal(document.querySelector('.studio-logo img').getAttribute('src'), 'assets/brand-icon-192.png');
-    assert.equal(document.querySelector('.login-brand-logo').getAttribute('src'), 'assets/brand-logo.jpg');
+    assert.equal(document.querySelector('.neural-brand img').getAttribute('src'), 'assets/brand-icon-192.png');
     assert.equal(document.querySelector('.dashboard-brand-visual img').getAttribute('src'), 'assets/brand-logo.jpg');
     assert.equal(document.querySelector('link[rel="apple-touch-icon"]').getAttribute('href'), 'assets/brand-icon-180.png');
     assert.equal(document.querySelector('meta[property="og:image"]').content, 'assets/brand-logo.jpg');
@@ -378,5 +382,46 @@ test('uploaded brand is used in the interface, browser icon and install manifest
     const mask = manifest.icons.find(i => i.purpose === 'maskable'); assert.equal(mask.sizes,'512x512');
     const sw = await readFile(new URL('sw.js', site), 'utf8');
     for (const path of [...manifest.icons.map(i=>i.src), 'assets/brand-icon-48.png', 'assets/brand-icon-180.png', 'assets/brand-logo.jpg']) assert.ok(sw.includes(`'./${path}'`), path);
+  } finally {dom.window.close();}
+});
+
+test('failed sign-in keeps the dialog open and password toggle is accessible', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[];
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:null}}),signInWithPassword:async args=>{calls.push(args);return {error:{message:'Invalid login credentials'}};}},rpc:async()=>({data:[]}),from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await delay(20); assert.equal($('#loginGate').hidden,true); $('#headerLogin').click();
+    $('#togglePassword').click(); assert.equal($('#authPassword').type,'text'); assert.equal($('#togglePassword').getAttribute('aria-pressed'),'true');
+    $('#authEmail').value='person@example.test'; $('#authPassword').value='password'; $('#authForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await waitFor(()=>$('#authStatus').textContent.includes('درست نیست')); assert.equal($('#loginGate').hidden,false); assert.equal(calls.length,1);
+    $('#guestAccess').click(); assert.equal($('#authPassword').value,''); assert.equal($('#authPassword').type,'password');
+  } finally {dom.window.close();}
+});
+
+test('recovery uses the backend, generic messaging and a validated password update', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[]; let callback;
+  const session={user:{id:'user-1',email:'person@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{callback=fn;},getSession:async()=>({data:{session:null}}),resetPasswordForEmail:async(email,opts)=>{calls.push({email,opts});return {error:null};},updateUser:async args=>{calls.push(args);return {error:null};}},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await delay(20); $('#headerLogin').click(); $('#forgotPassword').click(); assert.equal($('#authForgotPanel').hidden,false);
+    $('#recoveryEmail').value='person@example.test'; $('#forgotForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await waitFor(()=>$('#authStatus').textContent.includes('اگر حسابی')); assert.equal(calls[0].email,'person@example.test');
+    callback('PASSWORD_RECOVERY',session); assert.equal($('#loginGate').hidden,false); assert.equal($('#authResetPanel').hidden,false);
+    $('#newPassword').value='abcdef'; $('#confirmPassword').value='different'; $('#resetForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    assert.match($('#authStatus').textContent,/یکسان نیستند/); assert.equal(calls.length,1);
+    $('#confirmPassword').value='abcdef'; $('#resetForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await waitFor(()=>$('#loginGate').hidden); assert.equal(calls[1].password,'abcdef'); assert.match($('#sessionNotice').textContent,/موفقیت/);
+  } finally {dom.window.close();}
+});
+
+test('late initial session cannot replace a newer auth event', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let callback, finish;
+  const client={auth:{onAuthStateChange:fn=>{callback=fn;},getSession:()=>new Promise(resolve=>{finish=resolve;})},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    callback('SIGNED_IN',{user:{id:'user-1',email:'person@example.test'}}); finish({data:{session:null}}); await delay(30);
+    assert.equal($('#headerAccount').hidden,false); assert.equal($('#headerLogin').hidden,true);
+    callback('SIGNED_OUT',null); assert.equal($('#loginGate').hidden,true); assert.match($('#sessionNotice').textContent,/پایان/);
   } finally {dom.window.close();}
 });

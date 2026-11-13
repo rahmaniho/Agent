@@ -457,6 +457,7 @@ function parseRoute() {
   if (seg[0] === "install") return { view: "install" };
   if (seg[0] === "fcc") return { view: "fcc" };
   if (seg[0] === "plans") return { view: "plans" };
+  if (seg[0] === "subscribe") return { view: "subscribe" };
   if (seg[0] === "admin") return { view: "admin" };
   if (seg[0] === "workspace") return { view: "workspace" };
   if (seg[0] === "s" && seg[1]) return { view: "playbook", id: seg[1], anchor: seg[2] };
@@ -468,10 +469,11 @@ async function router() {
   await ready;
   const r = parseRoute();
   const locked = ["fcc", "install", "builder"].includes(r.view) && !state.entitled;
+  if (r.view === "home" || r.view === "subscribe") $(r.view === "home" ? "#homePurchaseSlot" : "#subscribePurchaseSlot").append($("#purchasePanel"));
   $$(".view").forEach((v) => { v.hidden = v.dataset.view !== (locked ? "paywall" : r.view); });
 
   $$("[data-nav]").forEach((a) => {
-    const isActive = a.dataset.nav === r.view || (r.view === "playbook" && a.dataset.nav === "services");
+    const isActive = a.dataset.nav === r.view || (r.view === "playbook" && a.dataset.nav === "services") || (r.view === "subscribe" && a.dataset.nav === "plans");
     a.classList.toggle("is-active", isActive);
     if (isActive) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
@@ -495,7 +497,7 @@ async function router() {
   }
   if (!firstRender) window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
   firstRender = false;
-  $("#main").focus({ preventScroll: true });
+  if (!document.body.classList.contains("login-open")) $("#main").focus({ preventScroll: true });
 }
 
 window.addEventListener("hashchange", router);
