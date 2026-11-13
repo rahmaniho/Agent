@@ -1,7 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Publishable key, intentionally public. Access to data is controlled by RLS.
-const supabase = createClient('https://asxyjxxgpfsgfmabqqdw.supabase.co', 'sb_publishable_djAPhLTPBob4-C1pcbN_OA__vFHmeif');
+const authCallbackError = /(?:[&#?])error(?:_code|_description)?=/.test(location.hash + location.search);
+// Sessions are browser-scoped unless the user explicitly chooses to remember them.
+let rememberSession = false;
+try { rememberSession = localStorage.getItem('studio-remember-session') === '1'; } catch {}
+const authStorage = {
+  getItem(key) { try { return sessionStorage.getItem(key) ?? localStorage.getItem(key); } catch { return null; } },
+  setItem(key, value) { try { const target = rememberSession ? localStorage : sessionStorage; const other = rememberSession ? sessionStorage : localStorage; target.setItem(key, value); other.removeItem(key); } catch {} },
+  removeItem(key) { try { sessionStorage.removeItem(key); localStorage.removeItem(key); } catch {} },
+};
+const supabase = createClient('https://asxyjxxgpfsgfmabqqdw.supabase.co', 'sb_publishable_djAPhLTPBob4-C1pcbN_OA__vFHmeif', {auth:{storage:authStorage,persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const $ = (s) => document.querySelector(s);
 const authStatus = $('#authStatus'), noteStatus = $('#noteStatus');
 const PAGE_SIZE = 25;
@@ -14,18 +23,35 @@ const report = (el, error) => {
   else el.textContent = 'انجام درخواست ممکن نشد. اتصال و اطلاعات را بررسی کنید و دوباره تلاش کنید.';
 };
 const gate = $('#loginGate');
+let authBusy = false, recoveryMode = false, intentionalSignOut = false, gateTrigger = null;
+function authPanel(panel) {
+  for (const name of ['Login','Forgot','Reset','Success']) $(`#auth${name}Panel`).hidden = name.toLowerCase() !== panel;
+  gate.setAttribute('aria-labelledby', {login:'loginTitle',forgot:'forgotTitle',reset:'resetTitle',success:'successTitle'}[panel]);
+  authStatus.textContent = ''; authStatus.dataset.kind = '';
+}
 function setGate(open, focusEmail = false) {
+  if (open && gate.hidden) gateTrigger = document.activeElement;
   gate.hidden = !open;
   document.body.classList.toggle('login-open', open);
   for (const node of document.body.children) if (node !== gate && node.tagName !== 'SCRIPT') node.inert = open;
-  if (open) setTimeout(() => { if (!gate.hidden) $(focusEmail ? '#authEmail' : '#entryPlans').focus(); }, 0);
+  if (open) setTimeout(() => { if (!gate.hidden) $(recoveryMode ? '#newPassword' : focusEmail ? '#authEmail' : '#guestAccess').focus(); }, 0);
+  else { $('#authPassword').value = ''; $('#authPassword').type = 'password'; $('#togglePassword').setAttribute('aria-pressed', 'false'); $('#togglePassword').setAttribute('aria-label', 'نمایش رمز عبور'); $('#resetForm').reset(); if (gateTrigger?.isConnected) gateTrigger.focus(); gateTrigger = null; }
 }
-function continueAsGuest() { try { sessionStorage.setItem('studio-guest', '1'); } catch {} setGate(false); }
-$('#guestAccess').addEventListener('click', continueAsGuest);
-$('#entryPlans').addEventListener('click', () => { continueAsGuest(); location.hash = '#/plans'; });
-$('#purchaseOpenLogin').addEventListener('click', () => setGate(true, true));
-$('#openLogin').addEventListener('click', () => setGate(true, true));
+function openLogin() { recoveryMode = false; $('#authLoggedOut').hidden = false; authPanel('login'); setGate(true, true); }
+$('#guestAccess').addEventListener('click', () => { if (!authBusy) { recoveryMode = false; setGate(false); } });
+$('#headerLogin').addEventListener('click', openLogin);
+$('#purchaseOpenLogin').addEventListener('click', openLogin);
+$('#openLogin').addEventListener('click', openLogin);
+$('#togglePassword').addEventListener('click', () => {
+  const input = $('#authPassword'), visible = input.type === 'password';
+  input.type = visible ? 'text' : 'password';
+  $('#togglePassword').setAttribute('aria-pressed', String(visible));
+  $('#togglePassword').setAttribute('aria-label', visible ? 'پنهان کردن رمز عبور' : 'نمایش رمز عبور');
+});
+$('#forgotPassword').addEventListener('click', () => { authPanel('forgot'); $('#recoveryEmail').value = $('#authEmail').value; $('#recoveryEmail').focus(); });
+$('#backToLogin').addEventListener('click', () => { authPanel('login'); $('#authEmail').focus(); });
 gate.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !authBusy) { recoveryMode = false; setGate(false); return; }
   if (event.key !== 'Tab') return;
   const controls = Array.from(gate.querySelectorAll('input:not(:disabled),button:not(:disabled),a[href]')).filter(el => el.offsetParent !== null);
   if (!controls.length) return;
@@ -33,7 +59,16 @@ gate.addEventListener('keydown', event => {
   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 });
-setGate(true);
+if (window.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches && !window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+  gate.addEventListener('pointermove', e => {
+    const box = gate.getBoundingClientRect();
+    const x = (e.clientX / box.width - .5), y = (e.clientY / box.height - .5);
+    gate.style.setProperty('--glow-x', `${e.clientX}px`); gate.style.setProperty('--glow-y', `${e.clientY}px`);
+    gate.style.setProperty('--sphere-x', `${x * 14}px`); gate.style.setProperty('--sphere-y', `${y * 10}px`);
+    gate.style.setProperty('--card-x', `${-y * 2}deg`); gate.style.setProperty('--card-y', `${x * 2}deg`);
+  }, {passive:true});
+  gate.addEventListener('pointerleave', () => { for (const key of ['--sphere-x','--sphere-y','--card-x','--card-y','--glow-x','--glow-y']) gate.style.removeProperty(key); });
+}
 let accountGeneration = 0, adminRows = [], expiryTimer;
 function publishCatalog(payload) {
   window.studioCatalog = payload;
@@ -275,27 +310,74 @@ function updateSession(session) {
   const previous = user?.id;
   user = session?.user || null;
   if (previous !== user?.id) { ++accountGeneration; resetPremium(); }
-  purchaseForm.hidden = !user; $('#purchaseLogin').hidden = !!user;
+  $('#purchaseFields').disabled = !user; $('#purchaseLogin').hidden = !!user;
   if (previous !== user?.id) { purchaseStatus.textContent = ''; purchaseEmail.hidden = true; purchaseEmail.removeAttribute('href'); purchaseForm.reset(); loadPurchases(); }
-  $('#authLoggedOut').hidden = !!user; $('#workspaceLoggedOut').hidden = !!user; $('#authLoggedIn').hidden = !user;
-  if (user) setGate(false);
-  else { let guest = false; try { guest = sessionStorage.getItem('studio-guest') === '1'; } catch {} if (guest) setGate(false); }
+  $('#authLoggedOut').hidden = !!user && !authBusy && !recoveryMode; $('#workspaceLoggedOut').hidden = !!user; $('#authLoggedIn').hidden = !user;
+  $('#headerLogin').hidden = !!user; $('#headerAccount').hidden = !user;
+  if (user && !authBusy && !recoveryMode && !gate.hidden) setGate(false);
+  if (previous && !user && !intentionalSignOut) { $('#sessionNotice').textContent = 'نشست شما پایان یافته است؛ برای ادامه دوباره وارد شوید.'; }
+  if (user) $('#sessionNotice').textContent = '';
   $('#accountEmail').textContent = user?.email || '';
   noteControls();
   if (previous !== user?.id) { loadNotes(); setTimeout(refreshAccount, 0); }
 }
+function setAuthLoading(button, busy, label) {
+  button.disabled = busy; button.dataset.loading = String(busy);
+  button.querySelector('span').textContent = busy ? 'در حال پردازش...' : label;
+}
+function authError(error) { authStatus.dataset.kind = 'error'; report(authStatus, error); }
 $('#authForm').addEventListener('submit', async event => {
-  event.preventDefault(); authStatus.textContent = 'در حال ورود...';
-  const { error } = await supabase.auth.signInWithPassword({ email: $('#authEmail').value.trim(), password: $('#authPassword').value });
-  if (error) report(authStatus, error); else { $('#authPassword').value = ''; authStatus.textContent = 'با موفقیت وارد شدید.'; }
+  event.preventDefault(); if (authBusy || !event.currentTarget.reportValidity()) return;
+  authBusy = true; rememberSession = $('#rememberMe').checked;
+  try { localStorage.setItem('studio-remember-session', rememberSession ? '1' : '0'); } catch {}
+  setAuthLoading($('#loginSubmit'), true, 'ورود به فضای کاری'); $('#signUp').disabled = true;
+  authStatus.dataset.kind = ''; authStatus.textContent = 'در حال بررسی اطلاعات...';
+  try {
+    const {data, error} = await supabase.auth.signInWithPassword({ email: $('#authEmail').value.trim(), password: $('#authPassword').value });
+    if (error) { authError(error); return; }
+    if (data?.session && !user) updateSession(data.session);
+    if (!user) { authStatus.dataset.kind = 'error'; authStatus.textContent = 'ورود تأیید نشد؛ دوباره تلاش کنید.'; return; }
+    $('#authPassword').value = ''; $('#authLoggedOut').hidden = false; authPanel('success');
+    await new Promise(resolve => setTimeout(resolve, window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 0 : 700));
+    setGate(false); $('#authLoggedOut').hidden = true;
+    if (!location.hash.startsWith('#/subscribe')) location.hash = '#/';
+  } catch { authStatus.dataset.kind = 'error'; authStatus.textContent = 'اتصال برقرار نشد؛ دوباره تلاش کنید.'; }
+  finally { authBusy = false; setAuthLoading($('#loginSubmit'), false, 'ورود به فضای کاری'); $('#signUp').disabled = false; }
 });
 $('#signUp').addEventListener('click', async () => {
-  if (!$('#authForm').reportValidity()) return;
-  authStatus.textContent = 'در حال ساخت حساب...';
-  const { data, error } = await supabase.auth.signUp({ email: $('#authEmail').value.trim(), password: $('#authPassword').value, options: { emailRedirectTo: location.origin + location.pathname } });
-  if (error) report(authStatus, error); else { $('#authPassword').value = ''; authStatus.textContent = data.session ? 'حساب ساخته شد.' : 'حساب ساخته شد؛ برای تأیید، ایمیل خود را بررسی کنید.'; }
+  if (authBusy || !$('#authForm').reportValidity()) return;
+  authBusy = true; rememberSession = $('#rememberMe').checked;
+  try { localStorage.setItem('studio-remember-session', rememberSession ? '1' : '0'); } catch {}
+  $('#signUp').disabled = true; $('#loginSubmit').disabled = true;
+  authStatus.dataset.kind = ''; authStatus.textContent = 'در حال ساخت حساب رایگان...';
+  try {
+    const { data, error } = await supabase.auth.signUp({ email: $('#authEmail').value.trim(), password: $('#authPassword').value, options: { emailRedirectTo: location.origin + location.pathname } });
+    if (error) authError(error); else { $('#authPassword').value = ''; authStatus.textContent = data.session ? 'حساب ساخته شد.' : 'برای تأیید حساب، ایمیل خود را بررسی کنید.'; if (data.session) { updateSession(data.session); setGate(false); } }
+  } catch { authStatus.dataset.kind = 'error'; authStatus.textContent = 'اتصال برقرار نشد؛ دوباره تلاش کنید.'; }
+  finally { authBusy = false; $('#signUp').disabled = false; $('#loginSubmit').disabled = false; }
 });
-$('#signOut').addEventListener('click', async () => { const { error } = await supabase.auth.signOut(); if (error) report(authStatus, error); else { try { sessionStorage.removeItem('studio-guest'); } catch {} authStatus.textContent = 'از حساب خارج شدید.'; setGate(true); } });
+$('#forgotForm').addEventListener('submit', async event => {
+  event.preventDefault(); if (authBusy || !event.currentTarget.reportValidity()) return;
+  authBusy = true; setAuthLoading($('#recoverySubmit'), true, 'ارسال لینک بازیابی');
+  try {
+    const {error} = await supabase.auth.resetPasswordForEmail($('#recoveryEmail').value.trim(), {redirectTo: location.origin + location.pathname});
+    if (error) { authStatus.dataset.kind = 'error'; authStatus.textContent = 'درخواست بازیابی ارسال نشد؛ اتصال را بررسی کنید و بعداً دوباره تلاش کنید.'; }
+    else { authStatus.dataset.kind = ''; authStatus.textContent = 'اگر حسابی با این ایمیل وجود داشته باشد، راهنمای بازیابی برای آن ارسال می‌شود.'; }
+  } catch { authStatus.dataset.kind = 'error'; authStatus.textContent = 'درخواست بازیابی ارسال نشد؛ بعداً دوباره تلاش کنید.'; }
+  finally { authBusy = false; setAuthLoading($('#recoverySubmit'), false, 'ارسال لینک بازیابی'); }
+});
+$('#resetForm').addEventListener('submit', async event => {
+  event.preventDefault(); if (authBusy || !recoveryMode || !event.currentTarget.reportValidity()) return;
+  if ($('#newPassword').value !== $('#confirmPassword').value) { authStatus.dataset.kind = 'error'; authStatus.textContent = 'رمزهای عبور یکسان نیستند.'; return; }
+  authBusy = true; setAuthLoading($('#resetSubmit'), true, 'ذخیره رمز جدید');
+  try {
+    const {error} = await supabase.auth.updateUser({password:$('#newPassword').value});
+    if (error) { authStatus.dataset.kind = 'error'; authStatus.textContent = 'تغییر رمز ممکن نشد؛ ممکن است لینک منقضی شده باشد.'; }
+    else { $('#resetForm').reset(); recoveryMode = false; setGate(false); $('#sessionNotice').textContent = 'رمز عبور با موفقیت تغییر کرد.'; }
+  } catch { authStatus.dataset.kind = 'error'; authStatus.textContent = 'تغییر رمز ممکن نشد؛ دوباره تلاش کنید.'; }
+  finally { authBusy = false; setAuthLoading($('#resetSubmit'), false, 'ذخیره رمز جدید'); }
+});
+$('#signOut').addEventListener('click', async () => { intentionalSignOut = true; try { const { error } = await supabase.auth.signOut(); if (error) report(authStatus, error); else { updateSession(null); setGate(false); location.hash = '#/'; $('#sessionNotice').textContent = 'از حساب خارج شدید.'; } } finally { intentionalSignOut = false; } });
 $('#noteForm').addEventListener('submit', async event => {
   event.preventDefault(); if (!user || saving) return;
   const content = $('#noteContent').value.trim(); if (!content) return;
@@ -310,5 +392,8 @@ $('#notesRefresh').addEventListener('click', () => loadNotes());
 noteControls();
 document.addEventListener('visibilitychange', () => { if (!document.hidden && user) refreshAccount(); });
 refreshAccount();
-supabase.auth.onAuthStateChange((_event, session) => { updateSession(session); });
-supabase.auth.getSession().then(({ data, error }) => { if (error) report(authStatus, error); else { updateSession(data.session); if (authStatus.textContent === 'در حال آماده‌سازی حساب...') authStatus.textContent = ''; } }).catch(() => { authStatus.textContent = 'اتصال به حساب ممکن نشد؛ دوباره تلاش کنید یا بدون ورود ادامه دهید.'; });
+let authEventGeneration = 0;
+supabase.auth.onAuthStateChange((event, session) => { authEventGeneration++; if (event === 'PASSWORD_RECOVERY') { recoveryMode = true; updateSession(session); $('#authLoggedOut').hidden = false; authPanel('reset'); setGate(true); } else updateSession(session); });
+const initialAuthGeneration = authEventGeneration;
+supabase.auth.getSession().then(({ data, error }) => { if (initialAuthGeneration !== authEventGeneration) return; if (error) { $('#sessionNotice').textContent = 'دریافت وضعیت حساب ممکن نشد.'; } else updateSession(data.session); }).catch(() => { $('#sessionNotice').textContent = 'اتصال به حساب ممکن نشد؛ دسترسی مهمان فعال است.'; });
+if (authCallbackError) { openLogin(); authPanel('forgot'); authStatus.dataset.kind = 'error'; authStatus.textContent = 'لینک ورود یا بازیابی نامعتبر یا منقضی شده است. می‌توانید لینک تازه درخواست کنید.'; setTimeout(() => { if (!gate.hidden && !$('#authForgotPanel').hidden) $('#recoveryEmail').focus(); }, 0); }

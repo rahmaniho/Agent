@@ -9,7 +9,9 @@ function loadIntegrations() {
       if (status.textContent === 'در حال آماده‌سازی فضای شخصی...') status.textContent = '';
     }).catch(() => {
       workspace = null;
-      document.querySelector('#authStatus').textContent = 'بارگذاری حساب ممکن نشد؛ صفحه را دوباره بارگذاری کنید یا بدون ورود ادامه دهید.';
+      const gate = document.querySelector('#loginGate');
+      document.querySelector('#sessionNotice').textContent = 'بارگذاری حساب ممکن نشد؛ صفحه را دوباره بارگذاری کنید.';
+      for (const selector of ['#headerLogin', '#openLogin', '#purchaseOpenLogin']) document.querySelector(selector).addEventListener('click', () => { gate.hidden = false; document.body.classList.add('login-open'); document.querySelector('#authStatus').textContent = 'بارگذاری حساب ممکن نشد؛ صفحه را دوباره بارگذاری کنید.'; }, {once:true});
       document.querySelector('#guestAccess').addEventListener('click', () => { document.querySelector('#loginGate').hidden = true; document.body.classList.remove('login-open'); for (const node of document.body.children) node.inert = false; }, {once: true});
     });
   }

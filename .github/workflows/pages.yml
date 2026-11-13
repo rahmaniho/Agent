@@ -50,6 +50,9 @@ jobs:
           npm ci --prefix site
           npm test --prefix site
 
+      - name: Remove build dependencies from the public artifact
+        run: rm -rf site/node_modules
+
       - name: Add CNAME if configured
         if: vars.PAGES_CUSTOM_DOMAIN != ''
         run: echo "${{ vars.PAGES_CUSTOM_DOMAIN }}" > site/CNAME
