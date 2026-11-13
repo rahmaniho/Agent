@@ -748,7 +748,9 @@ test('catalog editor saves through admin RPC, handles conflicts and clears on si
     assert.equal(w.studioCatalog.catalog.skills.find(x=>x.name==='synthetic-premium-tool').description_fa,'توضیح تازه');
     conflict=true; $('#catalogReviewDescription').value='نباید ذخیره شود'; $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
     await waitFor(()=>$('#catalogReviewStatus').textContent.includes('هم‌زمان تغییر'));
-    assert.equal($('#catalogReviewDescription').value,'تغییر دستگاه دیگر');
+    assert.equal($('#catalogReviewDescription').value,'نباید ذخیره شود');
+    assert.equal($('#catalogReviewConflict').hidden,false); assert.match($('#catalogReviewLatest').textContent,/تغییر دستگاه دیگر/); assert.equal($('#catalogReviewSave').disabled,true);
+    $('#catalogReviewRebase').click(); assert.equal($('#catalogReviewConflict').hidden,true); assert.equal($('#catalogReviewDescription').value,'نباید ذخیره شود'); assert.equal($('#catalogReviewSave').disabled,false);
     auth('SIGNED_OUT',null); assert.equal($('#catalogReviewDescription').value,''); assert.equal($('#catalogReviewItem').children.length,0); assert.equal($('#catalogReviewSave').disabled,true);
     await delay(50);
   } finally {dom.window.close();}
@@ -775,5 +777,117 @@ test('pending catalog edits are locked, errors are visible, and late results can
     $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true})); assert.equal(saves,2);
     auth('SIGNED_OUT',null); assert.equal($('#adminContent').hidden,true); resolveSave({error:null}); await delay(50);
     assert.equal(w.studioCatalog,null); assert.equal($('#catalogReviewDescription').value,''); assert.equal($('#catalogReviewSave').disabled,true);
+  } finally {dom.window.close();}
+});
+
+test('catalog drafts survive filtering and account refresh, and remote changes require an explicit decision', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[]; let auth;
+  const session={user:{id:'admin-1',email:'admin@example.test'}}; const current=structuredClone(fullData);
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},
+    rpc:async(name,args)=>{
+      calls.push({name,args});
+      if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
+      if(name==='studio_premium_catalog') return {data:[{catalog:structuredClone(current),playbooks:fullPlaybooks}]};
+      if(name==='studio_admin_update_catalog_review') { Object.assign(current[args.kind].find(x=>x.name===args.item_name),{description_fa:args.description,level:args.level}); return {error:null}; }
+      return {data:[],error:null};},
+    from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#adminContent').hidden && $('#catalogReviewItem option[value="synthetic-premium-tool"]'));
+    $('#catalogReviewItem').value='synthetic-premium-tool'; $('#catalogReviewItem').dispatchEvent(new w.Event('change'));
+    $('#catalogReviewDescription').value='پیش‌نویس محرمانه'; $('#catalogReviewDescription').dispatchEvent(new w.Event('input'));
+    $('#catalogReviewSearch').value='configure-ecc'; $('#catalogReviewSearch').dispatchEvent(new w.Event('input'));
+    $('#catalogReviewSearch').value='synthetic-premium-tool'; $('#catalogReviewSearch').dispatchEvent(new w.Event('input'));
+    assert.equal($('#catalogReviewDescription').value,'پیش‌نویس محرمانه');
+    Object.defineProperty(w.document,'hidden',{value:false,configurable:true});
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await waitFor(()=>!$('#adminContent').hidden && $('#catalogReviewDescription').value==='پیش‌نویس محرمانه');
+    assert.equal($('#catalogReviewConflict').hidden,true);
+    $('#catalogReviewMissing').checked=true; $('#catalogReviewMissing').dispatchEvent(new w.Event('change'));
+    assert.equal($('#catalogReviewDescription').value,'پیش‌نویس محرمانه');
+    current.skills.find(x=>x.name==='synthetic-premium-tool').description_fa='ویرایش دیگر';
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await waitFor(()=>!$('#adminContent').hidden && !$('#catalogReviewConflict').hidden);
+    assert.equal($('#catalogReviewDescription').value,'پیش‌نویس محرمانه'); assert.match($('#catalogReviewLatest').textContent,/ویرایش دیگر/);
+    $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true})); assert.equal(calls.filter(x=>x.name==='studio_admin_update_catalog_review').length,0);
+    $('#catalogReviewRebase').click(); $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    await waitFor(()=>$('#catalogReviewStatus').textContent.includes('ذخیره شد'));
+    assert.equal(calls.find(x=>x.name==='studio_admin_update_catalog_review').args.previous_description,'ویرایش دیگر');
+    $('#catalogReviewMissing').checked=false; $('#catalogReviewMissing').dispatchEvent(new w.Event('change'));
+    $('#catalogReviewDescription').value='پیش‌نویس دیگر'; $('#catalogReviewDescription').dispatchEvent(new w.Event('input'));
+    current.skills.find(x=>x.name==='synthetic-premium-tool').description_fa='نسخهٔ تازه';
+    w.document.dispatchEvent(new w.Event('visibilitychange')); await waitFor(()=>!$('#adminContent').hidden && !$('#catalogReviewConflict').hidden);
+    $('#catalogReviewUseLatest').click(); assert.equal($('#catalogReviewDescription').value,'نسخهٔ تازه');
+    $('#catalogReviewDescription').value='دادهٔ خصوصی'; $('#catalogReviewDescription').dispatchEvent(new w.Event('input'));
+    auth('SIGNED_OUT',null); assert.equal($('#catalogReviewDescription').value,'');
+    auth('SIGNED_IN',{user:{id:'admin-2',email:'other@example.test'}});
+    await waitFor(()=>!$('#adminContent').hidden && $('#catalogReviewItem option[value="synthetic-premium-tool"]'));
+    $('#catalogReviewItem').value='synthetic-premium-tool'; $('#catalogReviewItem').dispatchEvent(new w.Event('change'));
+    assert.equal($('#catalogReviewDescription').value,'نسخهٔ تازه'); assert.doesNotMatch(JSON.stringify(w.localStorage),/دادهٔ خصوصی/);
+    await delay(50);
+  } finally {dom.window.close();}
+});
+
+test('a save completing during account refresh reloads the committed catalog', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let finishSave, count=0;
+  const session={user:{id:'admin-1',email:'admin@example.test'}}; const current=structuredClone(fullData);
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})}, rpc:async(name,args)=>{
+    if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
+    if(name==='studio_premium_catalog') {count++; return {data:[{catalog:structuredClone(current),playbooks:fullPlaybooks}]};}
+    if(name==='studio_admin_update_catalog_review') return new Promise(resolve=>{finishSave=()=>{Object.assign(current[args.kind].find(x=>x.name===args.item_name),{description_fa:args.description,level:args.level}); resolve({error:null});};});
+    return {data:[],error:null};}, from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#adminContent').hidden && $('#catalogReviewItem option[value="synthetic-premium-tool"]'));
+    $('#catalogReviewItem').value='synthetic-premium-tool'; $('#catalogReviewItem').dispatchEvent(new w.Event('change'));
+    $('#catalogReviewDescription').value='ویرایش در حال ذخیره'; $('#catalogReviewDescription').dispatchEvent(new w.Event('input'));
+    $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    Object.defineProperty(w.document,'hidden',{value:false,configurable:true}); w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await waitFor(()=>count>=2 && !$('#adminContent').hidden); assert.equal($('#catalogReviewItem').disabled,true);
+    finishSave(); await waitFor(()=>count>=3 && !$('#adminContent').hidden && $('#catalogReviewDescription').value==='ویرایش در حال ذخیره');
+    assert.equal(w.studioCatalog.catalog.skills.find(x=>x.name==='synthetic-premium-tool').description_fa,'ویرایش در حال ذخیره');
+    assert.equal($('#catalogReviewDraftNotice').textContent,''); assert.equal($('#catalogReviewSave').disabled,false);
+    await delay(30);
+  } finally {dom.window.close();}
+});
+
+test('unsaved review warns before closing and allows the manager to cancel sign-out', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let signOuts=0;
+  const session={user:{id:'admin-1',email:'admin@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}}),signOut:async()=>{signOuts++; return {error:null};}},rpc:async(name)=>{
+    if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
+    if(name==='studio_premium_catalog') return {data:[{catalog:structuredClone(fullData),playbooks:fullPlaybooks}]};
+    return {data:[],error:null};},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.confirm=()=>false; w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#adminContent').hidden && $('#catalogReviewItem option[value="synthetic-premium-tool"]'));
+    $('#catalogReviewItem').value='synthetic-premium-tool'; $('#catalogReviewItem').dispatchEvent(new w.Event('change'));
+    $('#catalogReviewDescription').value='متن ذخیره‌نشده'; $('#catalogReviewDescription').dispatchEvent(new w.Event('input'));
+    const event=new w.Event('beforeunload',{cancelable:true}); w.dispatchEvent(event); assert.equal(event.defaultPrevented,true);
+    $('#signOut').click(); assert.equal(signOuts,0); assert.equal($('#catalogReviewDescription').value,'متن ذخیره‌نشده');
+    await delay(30);
+  } finally {dom.window.close();}
+});
+
+test('a failed conflict reload retains the draft and can be retried without reloading the page', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let failFresh=false;
+  const session={user:{id:'admin-1',email:'admin@example.test'}}, current=structuredClone(fullData);
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async(name)=>{
+    if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
+    if(name==='studio_premium_catalog') return failFresh ? {error:{message:'unavailable'}} : {data:[{catalog:structuredClone(current),playbooks:fullPlaybooks}]};
+    if(name==='studio_admin_update_catalog_review') {current.skills.find(x=>x.name==='synthetic-premium-tool').description_fa='نسخهٔ دیگر'; failFresh=true; return {error:{code:'40001'}};}
+    return {data:[],error:null};},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#adminContent').hidden && $('#catalogReviewItem option[value="synthetic-premium-tool"]'));
+    $('#catalogReviewItem').value='synthetic-premium-tool'; $('#catalogReviewItem').dispatchEvent(new w.Event('change'));
+    $('#catalogReviewDescription').value='متن من'; $('#catalogReviewDescription').dispatchEvent(new w.Event('input'));
+    $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    await waitFor(()=>$('#catalogReviewStatus').textContent.includes('دریافت نسخهٔ تازه ممکن نشد'));
+    assert.equal($('#catalogReviewDescription').value,'متن من'); assert.equal($('#catalogReviewSave').disabled,true);
+    failFresh=false; $('#catalogReviewRefresh').click();
+    await waitFor(()=>!$('#adminContent').hidden && !$('#catalogReviewConflict').hidden);
+    assert.equal($('#catalogReviewDescription').value,'متن من'); assert.match($('#catalogReviewLatest').textContent,/نسخهٔ دیگر/);
+    await delay(30);
   } finally {dom.window.close();}
 });
