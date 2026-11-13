@@ -30,7 +30,7 @@ cd kit && ./install-kit.sh               # نصب در ~/.claude
 node site/serve.mjs      # http://localhost:4173
 ```
 
-جزئیات: [`site/README.md`](site/README.md)
+کاتالوگ کامل فعلی در پایگاه دادهٔ محافظت‌شده نگهداری می‌شود؛ فقط نمونه‌ها در سایت استاتیک قرار دارند. نسخه‌های قبلی و منابع متن‌باز این مخزن همچنان عمومی‌اند و نمی‌توان آنها را محرمانه تلقی کرد. جزئیات و نحوهٔ پشتیبان‌گیری خصوصی: [`site/README.md`](site/README.md).
 
 ## `free-claude-code/` — سورس Free Claude Code
 

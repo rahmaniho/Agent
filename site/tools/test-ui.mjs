@@ -9,6 +9,16 @@ const app = await readFile(new URL('assets/app.js', site), 'utf8');
 const agent = await readFile(new URL('assets/agent.js', site), 'utf8');
 const data = JSON.parse(await readFile(new URL('assets/data.json', site), 'utf8'));
 const playbooks = JSON.parse(await readFile(new URL('assets/playbooks.json', site), 'utf8'));
+// Synthetic gated payload: exercises access transitions without storing paid material in Git.
+const fullData = structuredClone(data);
+fullData.skills.push({name:'synthetic-premium-tool',desc:'Synthetic test-only tool.'},{name:'configure-ecc',desc:'Synthetic test-only identifier.'});
+fullData.counts.skills = fullData.skills.length;
+const fullPlaybooks = structuredClone(playbooks);
+for (const service of fullPlaybooks.services) delete service.sample;
+fullPlaybooks.services.find(s=>s.id==='webapp').prompts.push({title:'آزمون',text:'SYNTHETIC PREMIUM PROMPT FOR TEST ONLY'});
+fullPlaybooks.services.find(s=>s.id==='harness').skills.push('configure-ecc');
+fullPlaybooks.services.find(s=>s.id==='website').skills.push('synthetic-premium-tool');
+
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(fn) { for (let i = 0; i < 100; i++) { if (fn()) return; await delay(10); } throw new Error('Timed out waiting for UI'); }
 function page() {
@@ -152,21 +162,17 @@ test('admin can submit a manual subscription change through the authorized RPC',
 });
 
 test('public assets include only the intended samples and no premium catalog content', async () => {
-  const fullData = JSON.parse(await readFile(new URL('../catalog/data.json', site), 'utf8'));
-  const fullPlaybooks = JSON.parse(await readFile(new URL('../catalog/playbooks.json', site), 'utf8'));
   assert.equal(data.skills.length, 16);
-  assert.equal(fullData.skills.length, 314);
   assert.equal(playbooks.services.reduce((n,s)=>n+s.prompts.length,0),2);
-  assert.equal(fullPlaybooks.services.reduce((n,s)=>n+s.prompts.length,0),38);
   const premiumPrompt = fullPlaybooks.services.find(s=>s.id==='webapp').prompts[0].text;
   assert.ok(!JSON.stringify(playbooks).includes(premiumPrompt));
   assert.ok(playbooks.services.every(s=>s.sample));
+  await assert.rejects(readFile(new URL('../catalog/data.json', site), 'utf8'), {code:'ENOENT'});
+  await assert.rejects(readFile(new URL('../catalog/playbooks.json', site), 'utf8'), {code:'ENOENT'});
 });
 
 test('authorized catalog replaces the sample and sign-out resets the visible view', async () => {
   const dom = page(), w=dom.window, $=s=>w.document.querySelector(s);
-  const fullData = JSON.parse(await readFile(new URL('../catalog/data.json', site), 'utf8'));
-  const fullPlaybooks = JSON.parse(await readFile(new URL('../catalog/playbooks.json', site), 'utf8'));
   w.fetch = async url => ({ok:true,json:async()=>url.endsWith('playbooks.json') ? playbooks : data});
   w.eval(app);
   try {
@@ -189,7 +195,7 @@ test('a signed-in customer submits a manual payment reference', async () => {
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let onAuth; const calls=[];
   const session={user:{id:'member-1',email:'member@example.test'}};
   const client={auth:{onAuthStateChange:fn=>{onAuth=fn;},getSession:async()=>({data:{session}})},
-    rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:false,plan:'free'}]}; if(name==='studio_my_purchases') return {data:[]}; if(name==='studio_prepare_receipt') return {data:'member-1/receipt-id',error:null}; return {data:1,error:null};},
+    rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:false,plan:'free'}]}; if(name==='studio_my_purchases_v2') return {data:[]}; if(name==='studio_prepare_receipt') return {data:'member-1/receipt-id',error:null}; return {data:1,error:null};},
     storage:{from:()=>({remove:async()=>({error:null}),upload:async()=>({error:null})})},
     from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
   w.__client=client;
@@ -223,9 +229,9 @@ test('manager reviews a purchase request with an expiry date', async () => {
     rpc:async(name,args)=>{calls.push({name,args});
       if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
       if(name==='studio_premium_catalog') return {data:[{catalog:data,playbooks}]};
-      if(name==='studio_admin_users' || name==='studio_my_purchases') return {data:[]};
-      if(name==='studio_admin_purchases') return {data:pending?[{id:1,email:'member@example.test',payment_reference:'receipt 123',payer_email:'payer@example.test',paid_at:'2024-01-02T09:15:00.000Z',amount_toman:990000}]:[]};
-      if(name==='studio_review_purchase'){pending=false;return {error:null};}
+      if(name==='studio_admin_users' || name==='studio_my_purchases_v2') return {data:[]};
+      if(name==='studio_admin_purchases_v3') return {data:pending?[{id:1,email:'member@example.test',payment_reference:'receipt 123',payer_email:'payer@example.test',paid_at:'2024-01-02T09:15:00.000Z',amount_toman:990000,status:'pending'}]:[]};
+      if(name==='studio_review_purchase_v2'){pending=false;return {error:null};}
       return {data:[],error:null};},
     from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
   w.__client=client; w.confirm=()=>true;
@@ -234,10 +240,10 @@ test('manager reviews a purchase request with an expiry date', async () => {
     await waitFor(()=>$('#adminPurchases input'));
     assert.match($('#adminPurchases').textContent,/payer@example.test/); assert.match($('#adminPurchases').textContent,/receipt 123/); assert.ok($('#adminPurchases input').value);
     $('#adminPurchases input').value='2099-01-01'; [...$('#adminPurchases').querySelectorAll('button')].find(b=>b.textContent==='تأیید و فعال‌سازی').click();
-    await waitFor(()=>calls.some(c=>c.name==='studio_review_purchase'));
-    const call=calls.find(c=>c.name==='studio_review_purchase');
+    await waitFor(()=>calls.some(c=>c.name==='studio_review_purchase_v2'));
+    const call=calls.find(c=>c.name==='studio_review_purchase_v2');
     assert.equal(call.args.decision,'approved'); assert.equal(call.args.request_id,1); assert.match(call.args.target_expiry,/2099-01-01/);
-    await waitFor(()=>$('#adminPurchaseStatus').textContent.includes('درخواستی در انتظار'));
+    await waitFor(()=>$('#adminPurchaseStatus').textContent.includes('درخواستی در این صفحه'));
   } finally { dom.window.close(); }
 });
 
@@ -278,8 +284,6 @@ test('prompt builder is gated in the UI, builds safely and clears on subscriptio
 
 test('app-owned screens and sharing metadata omit source names while tool IDs remain copyable', async () => {
   const dom = page(), w = dom.window, $ = s => w.document.querySelector(s);
-  const fullData = JSON.parse(await readFile(new URL('../catalog/data.json', site), 'utf8'));
-  const fullPlaybooks = JSON.parse(await readFile(new URL('../catalog/playbooks.json', site), 'utf8'));
   let copied = '';
   Object.defineProperty(w.navigator, 'clipboard', {value:{writeText:async text => {copied = text;}}});
   w.fetch = async url => ({ok:true, json:async () => url.endsWith('playbooks.json') ? playbooks : data});
@@ -351,7 +355,7 @@ test('manager requests a short-lived private receipt link', async () => {
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[];
   const session={user:{id:'admin-1',email:'admin@example.test'}};
   const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},
-    rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]}; if(name==='studio_premium_catalog') return {data:[{catalog:data,playbooks}]}; if(name==='studio_admin_purchases') return {data:[{id:3,email:'member@example.test',payment_reference:'ref',amount_toman:990000}]}; if(name==='studio_admin_receipt') return {data:'member-1/receipt'}; return {data:[]};},
+    rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]}; if(name==='studio_premium_catalog') return {data:[{catalog:data,playbooks}]}; if(name==='studio_admin_purchases_v3') return {data:[{id:3,email:'member@example.test',payment_reference:'ref',amount_toman:990000,status:'pending'}]}; if(name==='studio_admin_receipt') return {data:'member-1/receipt'}; return {data:[]};},
     storage:{from:bucket=>({createSignedUrl:async(path,ttl)=>{calls.push({bucket,path,ttl});return {data:{signedUrl:'https://example.test/private'},error:null};}})},
     from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
   w.__client=client;
@@ -505,8 +509,6 @@ test('account creation remains an explicit action using the existing signup meth
 });
 
 test('subject filters keep their selection when access changes and never retain premium items after sign-out', async () => {
-  const fullData=JSON.parse(await readFile(new URL('../catalog/data.json',site),'utf8'));
-  const fullPlaybooks=JSON.parse(await readFile(new URL('../catalog/playbooks.json',site),'utf8'));
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
   w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});w.eval(app);
   try {
@@ -521,5 +523,127 @@ test('subject filters keep their selection when access changes and never retain 
     await waitFor(()=>!$('#libraryPaywall').hidden);
     assert.equal($('#libCategory').value,'website');
     assert.deepEqual([...$('#libList').querySelectorAll('[data-copy-text]')].map(x=>x.dataset.copyText).sort(),playbooks.services.find(s=>s.id==='website').skills.slice().sort());
+  } finally {dom.window.close();}
+});
+
+test('project starter suggests a path, library searches Persian and favorites stay local', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app);
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>!$('[data-view=projects]').hidden && $('#projectType').options.length);
+    $('#projectType').value='website'; $('#projectType').dispatchEvent(new w.Event('change'));
+    assert.match($('#projectSuggestion').textContent,/پیش‌نیازها/); assert.match($('#projectSuggestion').textContent,/نقشه راه/);
+    w.location.hash='#/library'; await waitFor(()=>!$('[data-view=library]').hidden);
+    $('#libSearch').value='دسترسی'; $('#libSearch').dispatchEvent(new w.Event('input'));
+    assert.match($('#libList').textContent,/accessibility/);
+    $('#libList [data-favorite="accessibility"]').click();
+    assert.match(w.localStorage.getItem('studio-library-favorites-v1'),/skills:accessibility/);
+    $('#libSearch').value=''; $('#libSearch').dispatchEvent(new w.Event('input'));
+    $('#libFavorites').checked=true; $('#libFavorites').dispatchEvent(new w.Event('change'));
+    assert.equal($('#libList').querySelectorAll('li').length,1);
+    $('#libLevel').value='advanced'; $('#libLevel').dispatchEvent(new w.Event('change'));
+    assert.equal($('#libList').querySelectorAll('li').length,0);
+  } finally {dom.window.close();}
+});
+
+test('projects create and update a cloud checklist with optimistic versioning', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), records=[];
+  const session={user:{id:'member-1',email:'member@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},
+    rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},
+    from:table=>{
+      if(table!=='studio_projects') return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+      return {
+        select:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})}),
+        insert:async row=>{records.push({...row,id:'project-1',version:1});return {error:null};},
+        update:patch=>{let id,version; const chain={eq:(k,v)=>{if(k==='id') id=v; else version=v;return chain;},select:()=>({maybeSingle:async()=>{const r=records.find(r=>r.id===id && r.version===version);if(!r)return {data:null,error:null};Object.assign(r,patch);return {data:{version:r.version},error:null};}})};return chain;},
+        delete:()=>({eq:async()=>({error:null})})
+      };
+    }};
+  w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>!$('#projectCreate').disabled && $('#projectType').options.length);
+    $('#projectTitle').value='آزمون'; $('#projectDescription').value='نیاز من';
+    $('input[value=accounts]').click(); assert.match($('#projectSuggestion').textContent,/امنیت حساب‌ها/);
+    $('#projectForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    await waitFor(()=>$('#projectList input[type=checkbox]'));
+    assert.equal(records[0].description,'نیاز من'); assert.ok(records[0].checklist.some(step=>step.text.includes('امنیت حساب‌ها')));
+    $('#projectList input').click(); await waitFor(()=>records[0].version===2);
+    assert.equal(records[0].checklist[0].done,true); await waitFor(()=>$('#projectStatus').textContent==='پیشرفت ذخیره شد.');
+    $('#projectList details input').value='نام تازه'; $('#projectList details textarea').value='توضیح تازه'; $('#projectList details form').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    await waitFor(()=>records[0].version===3 && $('#projectList h3').textContent==='نام تازه'); assert.equal(records[0].description,'توضیح تازه');
+    $('#projectList .project-add-step input').value='تهیه نسخه پشتیبان'; $('#projectList .project-add-step').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    await waitFor(()=>records[0].version===4 && $('#projectList').textContent.includes('تهیه نسخه پشتیبان'));
+    await waitFor(()=>$('#projectStatus').textContent==='مرحله افزوده شد.');
+    records[0].version=5; records[0].description='تغییر از دستگاه دیگر';
+    $('#projectList input[type=checkbox]').click();
+    await waitFor(()=>$('#projectStatus').textContent.includes('دستگاه دیگری'));
+    assert.equal(records[0].version,5); assert.match($('#projectList').textContent,/تغییر از دستگاه دیگر/); await delay(50);
+  } finally {dom.window.close();}
+});
+
+test('admin rejection requires a reason and customer sees that reason', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); const calls=[];
+  const session={user:{id:'admin-1',email:'admin@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},
+    rpc:async(name,args)=>{calls.push({name,args});
+      if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
+      if(name==='studio_premium_catalog') return {data:[{catalog:data,playbooks}]};
+      if(name==='studio_admin_purchases_v3') return {data:[{id:4,status:'pending',email:'member@example.test',payment_reference:'test'}]};
+      if(name==='studio_my_purchases_v2') return {data:[{id:5,status:'rejected',payment_reference:'old',rejection_reason:'فیش ناخوانا است'}]};
+      return {data:[],error:null};},
+    from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.confirm=()=>true; w.__client=client;
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>$('#adminPurchases [aria-label="دلیل رد درخواست"]'));
+    assert.match($('#purchaseHistory').textContent,/فیش ناخوانا است/);
+    const reject=[...w.document.querySelectorAll('#adminPurchases button')].find(b=>b.textContent==='رد درخواست'); reject.click();
+    assert.equal(calls.filter(c=>c.name==='studio_review_purchase_v2').length,0);
+    $('#adminPurchases [aria-label="دلیل رد درخواست"]').value='فیش خوانا نیست';
+    $('#adminPurchases [aria-label="یادداشت داخلی بررسی"]').value='یادداشت خصوصی'; reject.click();
+    await waitFor(()=>calls.some(c=>c.name==='studio_review_purchase_v2'));
+    const call=calls.find(c=>c.name==='studio_review_purchase_v2');
+    assert.equal(call.args.decision,'rejected'); assert.equal(call.args.reason,'فیش خوانا نیست'); assert.equal(call.args.note,'یادداشت خصوصی');
+    await delay(50);
+  } finally {dom.window.close();}
+});
+
+
+test('all free sample library items have a reviewed Persian description and level', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data}); w.eval(app);
+  try {
+    w.location.hash='#/library'; await waitFor(()=>!$('[data-view=library]').hidden && $('#libList li'));
+    assert.equal($('#libLevel').closest('[data-view]').dataset.view,'library'); assert.equal($('#libFavorites').closest('[data-view]').dataset.view,'library');
+    for (const tab of w.document.querySelectorAll('[data-lib]')) {
+      tab.click(); assert.equal(w.document.querySelectorAll('#libList li').length, data[tab.dataset.lib].length);
+      assert.doesNotMatch($('#libList').textContent,/هنوز به فارسی بررسی نشده|ارزیابی‌نشده/);
+    }
+  } finally { dom.window.close(); }
+});
+
+test('manager can page through requests and change the status filter', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[];
+  const session={user:{id:'admin-1',email:'admin@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},
+    rpc:async(name,args)=>{calls.push({name,args});
+      if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
+      if(name==='studio_premium_catalog') return {data:[{catalog:data,playbooks}]};
+      if(name==='studio_admin_purchases_v3') return {data:args.page_offset===0 && args.filter_status==='pending' ? Array.from({length:50},(_,i)=>({id:i,status:'pending',payment_reference:'test'})) : args.page_offset===50 ? [{id:51,status:'pending',payment_reference:'last'}] : []};
+      return {data:[],error:null};},
+    from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#adminPurchasesNext').disabled);
+    assert.equal($('#adminPurchasesPrev').disabled,true); $('#adminPurchasesNext').click();
+    await waitFor(()=>$('#adminPurchases').textContent.includes('last'));
+    assert.equal($('#adminPurchasesNext').disabled,true); assert.equal($('#adminPurchasesPrev').disabled,false);
+    $('#adminPurchaseFilter').value='rejected'; $('#adminPurchaseFilter').dispatchEvent(new w.Event('change'));
+    await waitFor(()=>calls.some(c=>c.name==='studio_admin_purchases_v3' && c.args.filter_status==='rejected'));
+    assert.equal(calls.filter(c=>c.name==='studio_admin_purchases_v3').at(-1).args.page_offset,0);
+    await waitFor(()=>$('#adminPurchaseStatus').textContent.includes('درخواستی در این صفحه'));
   } finally {dom.window.close();}
 });
