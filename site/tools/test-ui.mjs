@@ -425,3 +425,43 @@ test('late initial session cannot replace a newer auth event', async () => {
     callback('SIGNED_OUT',null); assert.equal($('#loginGate').hidden,true); assert.match($('#sessionNotice').textContent,/پایان/);
   } finally {dom.window.close();}
 });
+
+test('Google sign-in reports an unconfigured provider without creating a session', async () => {
+  const dom = page(), w = dom.window, $ = s => w.document.querySelector(s); let calls = 0;
+  const client = {auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:null}}),signInWithOAuth:async()=>{calls++;return {error:null};}},rpc:async()=>({data:[]}),from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.fetch = async () => ({ok:true,json:async()=>({external:{google:false}})}); w.__client = client;
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    $('#headerLogin').click(); $('#googleSignIn').click();
+    await waitFor(()=>$('#authStatus').textContent.includes('هنوز فعال نشده'));
+    assert.equal(calls,0); assert.equal($('#loginGate').hidden,false); assert.equal($('#googleSignIn').disabled,false);
+    assert.equal(w.sessionStorage.getItem('studio-google-return'),null);
+  } finally {dom.window.close();}
+});
+
+test('Google sign-in uses the real OAuth flow and returns to the subscription form after authentication', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); const calls=[]; let onAuth;
+  const session={user:{id:'google-user',email:'google@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{onAuth=fn;},getSession:async()=>({data:{session:null}}),signInWithOAuth:async args=>{calls.push(args);return {data:{url:'https://accounts.google.com/'},error:null};}},rpc:async(name)=>({data:name==='studio_my_account'?[{is_admin:false,plan:'free',expires_at:null}]:[]}),from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.fetch=async()=>({ok:true,json:async()=>({external:{google:true}})});w.__client=client;w.location.hash='#/subscribe';
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    $('#purchaseOpenLogin').click(); $('#rememberMe').checked=true; $('#googleSignIn').click();
+    await waitFor(()=>calls.length===1);
+    assert.equal(calls[0].provider,'google'); assert.equal(calls[0].options.redirectTo,'http://127.0.0.1:4173/');
+    assert.equal(w.localStorage.getItem('studio-remember-session'),'1'); assert.equal(w.sessionStorage.getItem('studio-google-return'),'#/subscribe');
+    assert.equal($('#purchaseFields').disabled,true);
+    w.location.hash='#access_token=example'; onAuth('SIGNED_IN',session);
+    assert.equal(w.location.hash,'#/subscribe'); assert.equal(w.sessionStorage.getItem('studio-google-return'),null);
+    assert.equal($('#purchaseFields').disabled,false); await waitFor(()=>$('#accountPlan').textContent==='رایگان');
+  } finally {dom.window.close();}
+});
+
+test('Google callback failure is shown without reporting a successful sign-in', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:null}})},rpc:async()=>({data:[]}),from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.sessionStorage.setItem('studio-google-return','#/subscribe'); w.location.hash='#error=access_denied&error_description=cancelled'; w.__client=client;
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try { assert.equal($('#loginGate').hidden,false); assert.match($('#authStatus').textContent,/تکمیل نشد/); assert.equal(w.sessionStorage.getItem('studio-google-return'),null); assert.equal($('#purchaseFields').disabled,true); await delay(30); }
+  finally {dom.window.close();}
+});

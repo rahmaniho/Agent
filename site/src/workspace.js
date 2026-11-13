@@ -10,7 +10,9 @@ const authStorage = {
   setItem(key, value) { try { const target = rememberSession ? localStorage : sessionStorage; const other = rememberSession ? sessionStorage : localStorage; target.setItem(key, value); other.removeItem(key); } catch {} },
   removeItem(key) { try { sessionStorage.removeItem(key); localStorage.removeItem(key); } catch {} },
 };
-const supabase = createClient('https://asxyjxxgpfsgfmabqqdw.supabase.co', 'sb_publishable_djAPhLTPBob4-C1pcbN_OA__vFHmeif', {auth:{storage:authStorage,persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const supabaseUrl = 'https://asxyjxxgpfsgfmabqqdw.supabase.co';
+const publishableKey = 'sb_publishable_djAPhLTPBob4-C1pcbN_OA__vFHmeif';
+const supabase = createClient(supabaseUrl, publishableKey, {auth:{storage:authStorage,persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const $ = (s) => document.querySelector(s);
 const authStatus = $('#authStatus'), noteStatus = $('#noteStatus');
 const PAGE_SIZE = 25;
@@ -326,11 +328,41 @@ function setAuthLoading(button, busy, label) {
   button.querySelector('span').textContent = busy ? 'در حال پردازش...' : label;
 }
 function authError(error) { authStatus.dataset.kind = 'error'; report(authStatus, error); }
+// Keep only a known internal route across the external OAuth redirect.
+const oauthRouteKey = 'studio-google-return';
+function clearOAuthRoute() { try { sessionStorage.removeItem(oauthRouteKey); } catch {} }
+function restoreOAuthRoute(session) {
+  if (!session?.user) return;
+  try {
+    const route = sessionStorage.getItem(oauthRouteKey);
+    if (route === '#/subscribe' || route === '#/') { sessionStorage.removeItem(oauthRouteKey); location.hash = route; }
+  } catch {}
+}
+$('#googleSignIn').addEventListener('click', async () => {
+  if (authBusy) return;
+  authBusy = true; $('#googleSignIn').disabled = true; $('#loginSubmit').disabled = true; $('#signUp').disabled = true;
+  authStatus.dataset.kind = ''; authStatus.textContent = 'در حال آماده‌سازی ورود با گوگل...';
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/settings`, {headers:{apikey:publishableKey}});
+    if (!response.ok) throw new Error('Auth settings unavailable');
+    const settings = await response.json();
+    if (!settings.external?.google) { authStatus.dataset.kind = 'error'; authStatus.textContent = 'ورود با گوگل هنوز فعال نشده است. فعلاً از ایمیل استفاده کنید.'; return; }
+    rememberSession = $('#rememberMe').checked;
+    try {
+      localStorage.setItem('studio-remember-session', rememberSession ? '1' : '0');
+      sessionStorage.setItem(oauthRouteKey, location.hash.startsWith('#/subscribe') ? '#/subscribe' : '#/');
+    } catch {}
+    authStatus.textContent = 'در حال انتقال به گوگل...';
+    const {error} = await supabase.auth.signInWithOAuth({provider:'google', options:{redirectTo:location.origin + location.pathname}});
+    if (error) { clearOAuthRoute(); authStatus.dataset.kind = 'error'; authStatus.textContent = 'شروع ورود با گوگل ممکن نشد؛ دوباره تلاش کنید.'; }
+  } catch { clearOAuthRoute(); authStatus.dataset.kind = 'error'; authStatus.textContent = 'اتصال به سرویس ورود ممکن نشد؛ دوباره تلاش کنید.'; }
+  finally { authBusy = false; $('#googleSignIn').disabled = false; $('#loginSubmit').disabled = false; $('#signUp').disabled = false; }
+});
 $('#authForm').addEventListener('submit', async event => {
   event.preventDefault(); if (authBusy || !event.currentTarget.reportValidity()) return;
   authBusy = true; rememberSession = $('#rememberMe').checked;
   try { localStorage.setItem('studio-remember-session', rememberSession ? '1' : '0'); } catch {}
-  setAuthLoading($('#loginSubmit'), true, 'ورود به فضای کاری'); $('#signUp').disabled = true;
+  setAuthLoading($('#loginSubmit'), true, 'ورود به فضای کاری'); $('#signUp').disabled = true; $('#googleSignIn').disabled = true;
   authStatus.dataset.kind = ''; authStatus.textContent = 'در حال بررسی اطلاعات...';
   try {
     const {data, error} = await supabase.auth.signInWithPassword({ email: $('#authEmail').value.trim(), password: $('#authPassword').value });
@@ -342,19 +374,19 @@ $('#authForm').addEventListener('submit', async event => {
     setGate(false); $('#authLoggedOut').hidden = true;
     if (!location.hash.startsWith('#/subscribe')) location.hash = '#/';
   } catch { authStatus.dataset.kind = 'error'; authStatus.textContent = 'اتصال برقرار نشد؛ دوباره تلاش کنید.'; }
-  finally { authBusy = false; setAuthLoading($('#loginSubmit'), false, 'ورود به فضای کاری'); $('#signUp').disabled = false; }
+  finally { authBusy = false; setAuthLoading($('#loginSubmit'), false, 'ورود به فضای کاری'); $('#signUp').disabled = false; $('#googleSignIn').disabled = false; }
 });
 $('#signUp').addEventListener('click', async () => {
   if (authBusy || !$('#authForm').reportValidity()) return;
   authBusy = true; rememberSession = $('#rememberMe').checked;
   try { localStorage.setItem('studio-remember-session', rememberSession ? '1' : '0'); } catch {}
-  $('#signUp').disabled = true; $('#loginSubmit').disabled = true;
+  $('#signUp').disabled = true; $('#loginSubmit').disabled = true; $('#googleSignIn').disabled = true;
   authStatus.dataset.kind = ''; authStatus.textContent = 'در حال ساخت حساب رایگان...';
   try {
     const { data, error } = await supabase.auth.signUp({ email: $('#authEmail').value.trim(), password: $('#authPassword').value, options: { emailRedirectTo: location.origin + location.pathname } });
     if (error) authError(error); else { $('#authPassword').value = ''; authStatus.textContent = data.session ? 'حساب ساخته شد.' : 'برای تأیید حساب، ایمیل خود را بررسی کنید.'; if (data.session) { updateSession(data.session); setGate(false); } }
   } catch { authStatus.dataset.kind = 'error'; authStatus.textContent = 'اتصال برقرار نشد؛ دوباره تلاش کنید.'; }
-  finally { authBusy = false; $('#signUp').disabled = false; $('#loginSubmit').disabled = false; }
+  finally { authBusy = false; $('#signUp').disabled = false; $('#loginSubmit').disabled = false; $('#googleSignIn').disabled = false; }
 });
 $('#forgotForm').addEventListener('submit', async event => {
   event.preventDefault(); if (authBusy || !event.currentTarget.reportValidity()) return;
@@ -393,7 +425,7 @@ noteControls();
 document.addEventListener('visibilitychange', () => { if (!document.hidden && user) refreshAccount(); });
 refreshAccount();
 let authEventGeneration = 0;
-supabase.auth.onAuthStateChange((event, session) => { authEventGeneration++; if (event === 'PASSWORD_RECOVERY') { recoveryMode = true; updateSession(session); $('#authLoggedOut').hidden = false; authPanel('reset'); setGate(true); } else updateSession(session); });
+supabase.auth.onAuthStateChange((event, session) => { authEventGeneration++; if (event === 'PASSWORD_RECOVERY') { recoveryMode = true; updateSession(session); $('#authLoggedOut').hidden = false; authPanel('reset'); setGate(true); } else { updateSession(session); restoreOAuthRoute(session); } });
 const initialAuthGeneration = authEventGeneration;
-supabase.auth.getSession().then(({ data, error }) => { if (initialAuthGeneration !== authEventGeneration) return; if (error) { $('#sessionNotice').textContent = 'دریافت وضعیت حساب ممکن نشد.'; } else updateSession(data.session); }).catch(() => { $('#sessionNotice').textContent = 'اتصال به حساب ممکن نشد؛ دسترسی مهمان فعال است.'; });
-if (authCallbackError) { openLogin(); authPanel('forgot'); authStatus.dataset.kind = 'error'; authStatus.textContent = 'لینک ورود یا بازیابی نامعتبر یا منقضی شده است. می‌توانید لینک تازه درخواست کنید.'; setTimeout(() => { if (!gate.hidden && !$('#authForgotPanel').hidden) $('#recoveryEmail').focus(); }, 0); }
+supabase.auth.getSession().then(({ data, error }) => { if (initialAuthGeneration !== authEventGeneration) return; if (error) { $('#sessionNotice').textContent = 'دریافت وضعیت حساب ممکن نشد.'; } else { updateSession(data.session); restoreOAuthRoute(data.session); } }).catch(() => { $('#sessionNotice').textContent = 'اتصال به حساب ممکن نشد؛ دسترسی مهمان فعال است.'; });
+if (authCallbackError) { let googleCallback = false; try { googleCallback = !!sessionStorage.getItem(oauthRouteKey); } catch {} clearOAuthRoute(); openLogin(); if (googleCallback) { authStatus.dataset.kind = 'error'; authStatus.textContent = 'ورود با گوگل تکمیل نشد؛ دوباره تلاش کنید.'; } else { authPanel('forgot'); authStatus.dataset.kind = 'error'; authStatus.textContent = 'لینک ورود یا بازیابی نامعتبر یا منقضی شده است. می‌توانید لینک تازه درخواست کنید.'; setTimeout(() => { if (!gate.hidden && !$('#authForgotPanel').hidden) $('#recoveryEmail').focus(); }, 0); } }
