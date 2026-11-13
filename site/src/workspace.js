@@ -75,6 +75,7 @@ if (window.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches && !windo
 let accountGeneration = 0, adminRows = [], expiryTimer, projectGeneration = 0, adminPurchaseGeneration = 0, adminPurchaseOffset = 0, catalogEditorAdmin = false, catalogReviewBusy = false;
 const catalogDrafts = new Map();
 let catalogSelection = null, catalogSave = null;
+let projectRows = [], projectBusy = null, projectLoading = false, projectsLoaded = false;
 function publishCatalog(payload) {
   window.studioCatalog = payload;
   window.dispatchEvent(new CustomEvent('studio:catalog', {detail: payload}));
@@ -427,105 +428,202 @@ async function loadNotes(reset = true) {
     li.append(body, button); $('#notesList').append(li);
   });
 }
-async function loadProjects() {
-  const request=++projectGeneration, who=user?.id, host=$('#projectList'); host.replaceChildren();
-  if (!who) { $('#projectStatus').textContent='برای ذخیره پروژه وارد حساب شوید.'; return; }
-  $('#projectStatus').textContent='در حال دریافت پروژه‌ها...';
+function projectSteps(project) { return Array.isArray(project.checklist) ? project.checklist : []; }
+function projectProgress(project) {
+  const steps=projectSteps(project).filter(step=>step && typeof step.text==='string');
+  const done=steps.filter(step=>step.done===true).length, total=steps.length;
+  return {done,total,percent:total ? Math.round(done*100/total) : 0,state:!total || !done ? 'new' : done===total ? 'done' : 'active'};
+}
+function projectTypeName(type) {
+  return Array.from($('#projectType').options).find(option=>option.value===type)?.textContent || 'مسیر پروژه';
+}
+function normalizeProjectSearch(text) { return String(text || '').toLocaleLowerCase().replace(/ي/g,'ی').replace(/ك/g,'ک').trim(); }
+function updateProjectSummary() {
+  const stats=[['projectStatTotal',projectRows.length],['projectStatActive',projectRows.filter(p=>projectProgress(p).state==='active').length],['projectStatDone',projectRows.filter(p=>projectProgress(p).state==='done').length]];
+  for (const [id,count] of stats) $(`#${id}`).textContent=projectsLoaded ? faNumber(count) : '—';
+  const search=normalizeProjectSearch($('#projectSearch').value), filter=$('#projectFilter').value, sort=$('#projectSort').value;
+  const rows=[...projectRows].sort((a,b)=>sort==='name' ? String(a.title).localeCompare(String(b.title),'fa') : sort==='progress' ? projectProgress(b).percent-projectProgress(a).percent : (Date.parse(b.updated_at)||0)-(Date.parse(a.updated_at)||0));
+  const host=$('#projectList'); let visible=0;
+  for (const project of rows) {
+    const card=Array.from(host.children).find(node=>node.dataset.projectId===project.id); if (!card) continue;
+    const matches=(!search || normalizeProjectSearch(`${project.title} ${project.description} ${projectTypeName(project.project_type)}`).includes(search)) && (filter==='all' || projectProgress(project).state===filter);
+    card.hidden=!matches; if(matches) visible++; host.append(card);
+  }
+  $('#projectResults').textContent=projectsLoaded && projectRows.length ? `${faNumber(visible)} از ${faNumber(projectRows.length)} پروژه` : '';
+  $('#projectEmpty').hidden=!projectsLoaded || visible>0;
+  $('#projectEmpty').querySelector('strong').textContent=projectRows.length ? 'پروژه‌ای با این فیلتر پیدا نشد' : 'اولین پروژه‌ات را بساز';
+  $('#projectEmpty').querySelector('p').textContent=projectRows.length ? 'جست‌وجو یا وضعیت را تغییر بده تا پروژه‌های دیگر را ببینی.' : 'از پنل ساخت پروژه شروع کن؛ نقشه راه اولیه هم برایت آماده می‌شود.';
+}
+function projectHasDrafts() {
+  return Array.from($('#projectList').querySelectorAll('.project-card')).some(card=>{
+    const project=projectRows.find(p=>p.id===card.dataset.projectId); if(!project) return false;
+    return card.querySelector('.project-edit-title').value!==project.title || card.querySelector('.project-edit-description').value!==(project.description || '') || !!card.querySelector('.project-add-step input').value || Array.from(card.querySelectorAll('.project-step-edit input')).some(input=>input.value!==input.defaultValue);
+  });
+}
+function projectSetBusy(token) {
+  projectBusy=token;
+  $('#projectCreate').disabled=!!token || projectLoading || !user;
+  $('#projectRefresh').disabled=!!token || projectLoading || !user;
+  for(const card of $('#projectList').children) {
+    card.setAttribute('aria-busy', token || projectLoading ? 'true' : 'false');
+    for(const control of card.querySelectorAll('button,input,textarea')) control.disabled=!!token || projectLoading || (card.dataset.stale==='true' && (control.type==='checkbox' || control.tagName==='BUTTON'));
+  }
+}
+function projectConflict(card) {
+  card.dataset.stale='true';
+  card.querySelector('.project-card-status').textContent='ذخیره انجام نشد.';
+  const note=document.createElement('p'); note.className='project-conflict'; note.textContent='نسخهٔ این پروژه تغییر کرده است. برای ادامه، فهرست را به‌روزرسانی کنید.'; card.prepend(note);
+  projectSetBusy(null);
+  $('#projectStatus').textContent='این پروژه در دستگاه دیگری تغییر کرده است. متن‌های ذخیره‌نشده را نگه دارید و برای دریافت نسخهٔ تازه «به‌روزرسانی» را بزنید.';
+}
+async function loadProjects({confirmDrafts=false}={}) {
+  if (projectBusy || projectLoading) return;
+  if(confirmDrafts && projectHasDrafts() && !window.confirm('تغییرات ذخیره‌نشدهٔ پروژه‌ها با به‌روزرسانی از بین می‌روند. ادامه می‌دهید؟')) return;
+  const request=++projectGeneration, who=user?.id;
+  if (!who) { projectRows=[]; projectsLoaded=false; $('#projectList').replaceChildren(); updateProjectSummary(); $('#projectStatus').textContent='برای ذخیره پروژه وارد حساب شوید.'; return; }
+  projectLoading=true; projectSetBusy(null); $('#projectStatus').textContent='در حال دریافت پروژه‌ها...';
   try {
     const {data,error}=await supabase.from('studio_projects').select('id,title,description,project_type,checklist,version,updated_at').order('updated_at',{ascending:false}).limit(100);
-    if (request!==projectGeneration || user?.id!==who) return;
+    if (request!==projectGeneration || user?.id!==who || projectBusy) return;
     if(error) throw error;
-    $('#projectStatus').textContent=data?.length ? `${faNumber(data.length)} پروژه نمایش داده شد.` : 'هنوز پروژه‌ای ذخیره نشده است.';
-    for (const project of data || []) {
-      const card=document.createElement('article'); card.className='project-card';
-      const title=document.createElement('h3'); title.textContent=project.title;
-      const description=document.createElement('p'); description.textContent=project.description || 'بدون توضیح';
-      const link=document.createElement('a'); link.href=`#/s/${encodeURIComponent(project.project_type)}`; link.textContent='باز کردن مسیر مرتبط ←';
-      const list=document.createElement('ul');
-      for (const [index,step] of (Array.isArray(project.checklist) ? project.checklist : []).entries()) {
-        if (!step || typeof step.text!=='string') continue;
-        const li=document.createElement('li'), label=document.createElement('label'), check=document.createElement('input'), text=document.createElement('span');
-        check.type='checkbox'; check.checked=step.done===true; text.textContent=step.text;
-        check.addEventListener('change', async () => {
-          check.disabled=true; const next=project.checklist.map((s,i)=>i===index?{text:s.text,done:check.checked}:s);
-          try {
-            const result=await supabase.from('studio_projects').update({checklist:next,version:project.version+1,updated_at:new Date().toISOString()}).eq('id',project.id).eq('version',project.version).select('version').maybeSingle();
-            if(user?.id!==who || request!==projectGeneration) return;
-            if(result.error) throw result.error;
-            if(!result.data) { await loadProjects(); if(user?.id===who) $('#projectStatus').textContent='پروژه در دستگاه دیگری تغییر کرده است؛ اطلاعات تازه بارگذاری شد. تغییر خود را دوباره اعمال کنید.'; return; }
-            project.version=result.data.version; project.checklist=next; $('#projectStatus').textContent='پیشرفت ذخیره شد.';
-          } catch { if(user?.id===who) {check.checked=!check.checked; $('#projectStatus').textContent='ذخیره پیشرفت ممکن نشد؛ اتصال را بررسی کنید.';} } finally {check.disabled=false;}
-        });
-        label.append(check,text);li.append(label);list.append(li);
-      }
-      const addStep=document.createElement('form'); addStep.className='project-add-step';
-      const stepInput=document.createElement('input'); stepInput.placeholder='مرحلهٔ دلخواه'; stepInput.setAttribute('aria-label','مرحلهٔ دلخواه'); stepInput.maxLength=200; stepInput.required=true;
-      const addButton=document.createElement('button'); addButton.type='submit'; addButton.className='btn btn--outline'; addButton.textContent='افزودن مرحله';
-      addStep.append(stepInput,addButton);
-      addStep.addEventListener('submit',async event=>{
-        event.preventDefault(); const text=stepInput.value.trim();
-        if(!text) { $('#projectStatus').textContent='متن مرحله را وارد کنید.'; return; }
-        if(project.checklist.length>=50) { $('#projectStatus').textContent='هر پروژه حداکثر ۵۰ مرحله دارد.'; return; }
-        addButton.disabled=true;
-        try {
-          const next=[...project.checklist,{text,done:false}];
-          const result=await supabase.from('studio_projects').update({checklist:next,version:project.version+1,updated_at:new Date().toISOString()}).eq('id',project.id).eq('version',project.version).select('version').maybeSingle();
-          if(user?.id!==who || request!==projectGeneration) return;
-          if(result.error) throw result.error;
-          if(!result.data) { await loadProjects(); if(user?.id===who) $('#projectStatus').textContent='پروژه در دستگاه دیگری تغییر کرده است؛ اطلاعات تازه بارگذاری شد. تغییر خود را دوباره اعمال کنید.'; return; }
-          await loadProjects(); if(user?.id===who) $('#projectStatus').textContent='مرحله افزوده شد.';
-        } catch { if(user?.id===who) $('#projectStatus').textContent='افزودن مرحله ممکن نشد؛ اتصال را بررسی کنید.'; }
-        finally {addButton.disabled=false;}
-      });
-      const editor=document.createElement('details'); editor.className='project-editor';
-      const summary=document.createElement('summary'); summary.textContent='ویرایش نام و توضیح';
-      const form=document.createElement('form'); form.className='studio-form';
-      const titleLabel=document.createElement('label'); titleLabel.textContent='نام پروژه';
-      const titleInput=document.createElement('input'); titleInput.value=project.title; titleInput.required=true; titleInput.maxLength=120; titleLabel.append(titleInput);
-      const descriptionLabel=document.createElement('label'); descriptionLabel.textContent='توضیح پروژه';
-      const descriptionInput=document.createElement('textarea'); descriptionInput.value=project.description; descriptionInput.maxLength=3000; descriptionInput.rows=3; descriptionLabel.append(descriptionInput);
-      const save=document.createElement('button'); save.type='submit'; save.className='btn btn--outline'; save.textContent='ذخیره تغییرات';
-      form.append(titleLabel,descriptionLabel,save); editor.append(summary,form);
-      form.addEventListener('submit', async event=>{
-        event.preventDefault(); const nextTitle=titleInput.value.trim();
-        if(!nextTitle) { $('#projectStatus').textContent='نام پروژه را وارد کنید.'; titleInput.focus(); return; }
-        save.disabled=true;
-        try {
-          const result=await supabase.from('studio_projects').update({title:nextTitle,description:descriptionInput.value.trim(),version:project.version+1,updated_at:new Date().toISOString()}).eq('id',project.id).eq('version',project.version).select('version').maybeSingle();
-          if(user?.id!==who || request!==projectGeneration) return;
-          if(result.error) throw result.error;
-          if(!result.data) { await loadProjects(); if(user?.id===who) $('#projectStatus').textContent='پروژه در دستگاه دیگری تغییر کرده است؛ اطلاعات تازه بارگذاری شد. تغییر خود را دوباره اعمال کنید.'; return; }
-          project.version=result.data.version; project.title=nextTitle; project.description=descriptionInput.value.trim(); title.textContent=project.title; description.textContent=project.description || 'بدون توضیح'; editor.open=false; $('#projectStatus').textContent='تغییرات پروژه ذخیره شد.';
-        } catch { if(user?.id===who) $('#projectStatus').textContent='ذخیره پروژه ممکن نشد؛ اتصال را بررسی کنید.'; }
-        finally {save.disabled=false;}
-      });
-      const remove=document.createElement('button'); remove.type='button'; remove.className='btn btn--outline'; remove.textContent='حذف پروژه';
-      remove.addEventListener('click',async()=>{ if(!window.confirm('این پروژه و چک‌لیست آن حذف شود؟')) return; remove.disabled=true; try {const {error}=await supabase.from('studio_projects').delete().eq('id',project.id); if(user?.id!==who) return; if(error) throw error; await loadProjects();} catch {if(user?.id===who) $('#projectStatus').textContent='حذف پروژه ممکن نشد.';} finally {remove.disabled=false;} });
-      card.append(title,description,link,list,addStep,editor,remove);host.append(card);
-    }
-  } catch { if(request===projectGeneration && user?.id===who) $('#projectStatus').textContent='دریافت پروژه‌ها ممکن نشد؛ اتصال را بررسی کنید.'; }
+    projectRows=data || []; projectsLoaded=true; $('#projectList').replaceChildren();
+    for (const project of projectRows) $('#projectList').append(renderProjectCard(project,who,request));
+    updateProjectSummary();
+    $('#projectStatus').textContent=projectRows.length ? '' : 'پروژه‌ای ذخیره نشده است.';
+  } catch { if(request===projectGeneration && user?.id===who) { for(const card of $('#projectList').children) card.dataset.stale='true'; $('#projectStatus').textContent='دریافت پروژه‌ها ممکن نشد؛ دوباره تلاش کنید. اطلاعات قبلی قابل ویرایش نیست.'; } }
+  finally { if(request===projectGeneration && user?.id===who) { projectLoading=false; projectSetBusy(null); } }
+}
+function renderProjectCard(project,who,request) {
+  const card=document.createElement('article'); card.className='project-card'; card.dataset.projectId=project.id;
+  const head=document.createElement('div'); head.className='project-card-head';
+  const heading=document.createElement('div'); heading.className='project-card-title';
+  const icon=document.createElement('span'); icon.className='project-card-icon'; icon.setAttribute('aria-hidden','true'); icon.textContent='◇';
+  const headingText=document.createElement('div'); const kind=document.createElement('span'); kind.className='project-kind'; kind.textContent=projectTypeName(project.project_type);
+  const title=document.createElement('h3'); title.textContent=project.title; headingText.append(kind,title); heading.append(icon,headingText);
+  const badge=document.createElement('span'); badge.className='project-badge'; head.append(heading,badge);
+  const description=document.createElement('p'); description.className='project-description'; description.textContent=project.description || 'برای این پروژه هنوز توضیحی ثبت نشده است.';
+  const meta=document.createElement('div'); meta.className='project-meta';
+  const date=document.createElement('span'); const link=document.createElement('a'); link.href=`#/s/${encodeURIComponent(project.project_type)}`; link.textContent='مسیر مرتبط ←'; meta.append(date,link);
+  const progressBox=document.createElement('div'); progressBox.className='project-progress';
+  const progressLine=document.createElement('div'); const progressLabel=document.createElement('strong'); progressLabel.textContent='پیشرفت پروژه'; const percent=document.createElement('span'); progressLine.append(progressLabel,percent);
+  const progress=document.createElement('progress'); progress.max=100; progress.setAttribute('aria-label','پیشرفت چک‌لیست پروژه');
+  const progressCount=document.createElement('small'); const nextStep=document.createElement('p'); nextStep.className='project-next'; progressBox.append(progressLine,progress,progressCount,nextStep);
+  const steps=document.createElement('details'); steps.className='project-steps'; steps.open=true;
+  const stepsHeading=document.createElement('summary'); const list=document.createElement('ul'); list.className='project-step-list'; steps.append(stepsHeading,list);
+  const addStep=document.createElement('form'); addStep.className='project-add-step';
+  const stepInput=document.createElement('input'); stepInput.placeholder='مرحلهٔ جدید...'; stepInput.setAttribute('aria-label','مرحلهٔ جدید'); stepInput.maxLength=200; stepInput.required=true;
+  const addButton=document.createElement('button'); addButton.type='submit'; addButton.className='btn btn--outline'; addButton.textContent='+ افزودن'; addStep.append(stepInput,addButton); steps.append(addStep);
+  const editor=document.createElement('details'); editor.className='project-editor';
+  const summary=document.createElement('summary'); summary.textContent='ویرایش اطلاعات پروژه';
+  const form=document.createElement('form'); form.className='studio-form';
+  const titleLabel=document.createElement('label'); titleLabel.textContent='نام پروژه';
+  const titleInput=document.createElement('input'); titleInput.className='project-edit-title'; titleInput.value=project.title; titleInput.required=true; titleInput.maxLength=120; titleLabel.append(titleInput);
+  const descriptionLabel=document.createElement('label'); descriptionLabel.textContent='توضیح پروژه';
+  const descriptionInput=document.createElement('textarea'); descriptionInput.className='project-edit-description'; descriptionInput.value=project.description || ''; descriptionInput.maxLength=3000; descriptionInput.rows=3; descriptionLabel.append(descriptionInput);
+  const save=document.createElement('button'); save.type='submit'; save.className='btn btn--outline'; save.textContent='ذخیره تغییرات'; form.append(titleLabel,descriptionLabel,save); editor.append(summary,form);
+  const footer=document.createElement('div'); footer.className='project-card-footer';
+  const remove=document.createElement('button'); remove.type='button'; remove.className='project-delete'; remove.textContent='حذف پروژه'; footer.append(editor,remove);
+  const cardStatus=document.createElement('p'); cardStatus.className='project-card-status';
+  card.append(head,description,meta,progressBox,steps,footer,cardStatus);
+  function message(text) { cardStatus.textContent=text; $('#projectStatus').textContent=text; }
+  function refreshCard() {
+    const info=projectProgress(project); badge.dataset.state=info.state; badge.textContent={new:'شروع نشده',active:'در حال انجام',done:'تکمیل‌شده'}[info.state];
+    percent.textContent=`${faNumber(info.percent)}٪`; progress.value=info.percent; progressCount.textContent=`${faNumber(info.done)} از ${faNumber(info.total)} مرحله انجام شده`; stepsHeading.textContent=`مراحل پروژه · ${faNumber(info.total)} مرحله`;
+    const upcoming=projectSteps(project).find(step=>step && typeof step.text==='string' && step.done!==true); nextStep.textContent=upcoming ? `قدم بعدی: ${upcoming.text}` : info.total ? 'همه مراحل انجام شده‌اند.' : 'برای شروع یک مرحله اضافه کنید.';
+    const when=Date.parse(project.updated_at); date.textContent=Number.isFinite(when) ? `آخرین تغییر: ${new Date(when).toLocaleDateString('fa-IR')}` : 'زمان تغییر نامشخص';
+    title.textContent=project.title; description.textContent=project.description || 'برای این پروژه هنوز توضیحی ثبت نشده است.'; updateProjectSummary();
+  }
+  async function saveChanges(patch,successMessage,onSuccess) {
+    if(projectBusy || projectLoading || card.dataset.stale==='true' || user?.id!==who || request!==projectGeneration) return false;
+    const token={who}, now=new Date().toISOString(); projectSetBusy(token); message('در حال ذخیره تغییرات...');
+    try {
+      const result=await supabase.from('studio_projects').update({...patch,version:project.version+1,updated_at:now}).eq('id',project.id).eq('version',project.version).select('version').maybeSingle();
+      if(projectBusy!==token || user?.id!==who || request!==projectGeneration) return false;
+      if(result.error) throw result.error;
+      if(!result.data) { projectConflict(card); return false; }
+      Object.assign(project,patch,{version:result.data.version,updated_at:now}); onSuccess?.(); refreshCard(); message(successMessage); return true;
+    } catch { if(projectBusy===token && user?.id===who) message('ذخیره تغییرات ممکن نشد؛ اتصال یا حجم اطلاعات را بررسی کنید.'); return false; }
+    finally { if(projectBusy===token) projectSetBusy(null); }
+  }
+  function appendStep(step,index) {
+    if(!step || typeof step.text!=='string') return;
+    const li=document.createElement('li'); li.className='project-step'; li.dataset.index=String(index);
+    const label=document.createElement('label'), check=document.createElement('input'), text=document.createElement('span');
+    check.type='checkbox'; check.checked=step.done===true; text.textContent=step.text; label.append(check,text);
+    const actions=document.createElement('div'); actions.className='project-step-actions';
+    const edit=document.createElement('button'); edit.type='button'; edit.textContent='ویرایش'; edit.setAttribute('aria-label',`ویرایش مرحله ${step.text}`);
+    const del=document.createElement('button'); del.type='button'; del.textContent='حذف'; del.setAttribute('aria-label',`حذف مرحله ${step.text}`); actions.append(edit,del);
+    const editForm=document.createElement('form'); editForm.className='project-step-edit'; editForm.hidden=true;
+    const input=document.createElement('input'); input.value=step.text; input.defaultValue=step.text; input.required=true; input.maxLength=200; input.setAttribute('aria-label','متن مرحله');
+    const saveStep=document.createElement('button'); saveStep.type='submit'; saveStep.textContent='ذخیره'; const cancel=document.createElement('button'); cancel.type='button'; cancel.textContent='انصراف'; editForm.append(input,saveStep,cancel);
+    li.append(label,actions,editForm); list.append(li);
+    check.addEventListener('change',async()=>{
+      const previous=!check.checked, idx=Number(li.dataset.index), next=projectSteps(project).map((entry,i)=>i===idx?{...entry,done:check.checked}:entry);
+      if(!await saveChanges({checklist:next},'پیشرفت ذخیره شد.')) check.checked=previous;
+    });
+    edit.addEventListener('click',()=>{ editForm.hidden=false; input.focus(); });
+    cancel.addEventListener('click',()=>{input.value=input.defaultValue; editForm.hidden=true;});
+    editForm.addEventListener('submit',async event=>{
+      event.preventDefault(); const value=input.value.trim(), idx=Number(li.dataset.index); if(!value) { input.focus(); return; }
+      const next=projectSteps(project).map((entry,i)=>i===idx?{...entry,text:value}:entry);
+      await saveChanges({checklist:next},'مرحله ویرایش شد.',()=>{ text.textContent=value; input.value=value; input.defaultValue=value; editForm.hidden=true; edit.setAttribute('aria-label',`ویرایش مرحله ${value}`); del.setAttribute('aria-label',`حذف مرحله ${value}`); });
+    });
+    del.addEventListener('click',async()=>{
+      if(projectBusy || !window.confirm('این مرحله حذف شود؟')) return;
+      const idx=Number(li.dataset.index), next=projectSteps(project).filter((_,i)=>i!==idx);
+      await saveChanges({checklist:next},'مرحله حذف شد.',()=>{li.remove(); for(const other of list.children) if(Number(other.dataset.index)>idx) other.dataset.index=String(Number(other.dataset.index)-1);});
+    });
+  }
+  projectSteps(project).forEach(appendStep);
+  addStep.addEventListener('submit',async event=>{
+    event.preventDefault(); const text=stepInput.value.trim(); if(!text) { stepInput.focus(); return; }
+    if(projectSteps(project).length>=50) { $('#projectStatus').textContent='هر پروژه حداکثر ۵۰ مرحله دارد.'; return; }
+    const next=[...projectSteps(project),{text,done:false}];
+    await saveChanges({checklist:next},'مرحله افزوده شد.',()=>{appendStep(next[next.length-1],next.length-1); stepInput.value='';});
+  });
+  form.addEventListener('submit',async event=>{
+    event.preventDefault(); const nextTitle=titleInput.value.trim(); if(!nextTitle) { titleInput.focus(); return; }
+    await saveChanges({title:nextTitle,description:descriptionInput.value.trim()},'تغییرات پروژه ذخیره شد.',()=>{titleInput.value=nextTitle; descriptionInput.value=project.description; editor.open=false;});
+  });
+  remove.addEventListener('click',async()=>{
+    if(projectBusy || card.dataset.stale==='true' || !window.confirm('این پروژه و تمام مراحلش حذف شود؟')) return;
+    const token={who}; projectSetBusy(token);
+    try {
+      const result=await supabase.from('studio_projects').delete().eq('id',project.id).eq('version',project.version).select('id').maybeSingle();
+      if(projectBusy!==token || user?.id!==who || request!==projectGeneration) return;
+      if(result.error) throw result.error;
+      if(!result.data) { projectConflict(card); return; }
+      card.remove(); projectRows=projectRows.filter(row=>row.id!==project.id); updateProjectSummary(); $('#projectStatus').textContent='پروژه حذف شد.';
+    } catch { if(projectBusy===token && user?.id===who) $('#projectStatus').textContent='حذف پروژه ممکن نشد؛ اتصال را بررسی کنید.'; }
+    finally { if(projectBusy===token) projectSetBusy(null); }
+  });
+  refreshCard(); return card;
 }
 $('#projectForm').addEventListener('submit',async event=>{
-  event.preventDefault(); if(!user || !event.currentTarget.reportValidity()) return;
-  const who=user.id, button=$('#projectCreate'); button.disabled=true; $('#projectStatus').textContent='در حال ذخیره پروژه...';
+  event.preventDefault(); if(!user || projectBusy || projectLoading || !event.currentTarget.reportValidity()) return;
+  const title=$('#projectTitle').value.trim(); if(!title) { $('#projectTitle').focus(); return; }
+  if(projectHasDrafts() && !window.confirm('با ساخت پروژه، فهرست بازخوانی و تغییرات ذخیره‌نشدهٔ پروژه‌های دیگر پاک می‌شود. ادامه می‌دهید؟')) return;
+  const who=user.id, token={who}; projectSetBusy(token); $('#projectStatus').textContent='در حال ذخیره پروژه...'; $('#projectCreateStatus').textContent='در حال ذخیره پروژه...';
   try {
-    const {error}=await supabase.from('studio_projects').insert({title:$('#projectTitle').value.trim(),description:$('#projectDescription').value.trim(),project_type:$('#projectType').value,checklist:Array.from(document.querySelectorAll('#projectSuggestion li'), node=>({text:node.textContent,done:false}))});
-    if(user?.id!==who) return; if(error) throw error;
-    $('#projectTitle').value=''; $('#projectDescription').value=''; await loadProjects();
-  } catch {if(user?.id===who) $('#projectStatus').textContent='ذخیره پروژه ممکن نشد؛ اتصال و اطلاعات را بررسی کنید.';}
-  finally {button.disabled=!user;}
+    const {error}=await supabase.from('studio_projects').insert({title,description:$('#projectDescription').value.trim(),project_type:$('#projectType').value,checklist:Array.from(document.querySelectorAll('#projectSuggestion li'), node=>({text:node.textContent,done:false}))});
+    if(projectBusy!==token || user?.id!==who) return; if(error) throw error;
+    $('#projectTitle').value=''; $('#projectDescription').value=''; projectSetBusy(null); await loadProjects(); if(user?.id===who) $('#projectCreateStatus').textContent='پروژه ذخیره شد؛ در فهرست پروژه‌ها می‌توانید آن را مدیریت کنید.';
+  } catch {if(projectBusy===token && user?.id===who) { $('#projectStatus').textContent='ذخیره پروژه ممکن نشد؛ اتصال و اطلاعات را بررسی کنید.'; $('#projectCreateStatus').textContent=$('#projectStatus').textContent; }}
+  finally {if(projectBusy===token) projectSetBusy(null);}
 });
-$('#projectRefresh').addEventListener('click',loadProjects);
-window.addEventListener('studio:projects-open',loadProjects);
+$('#projectNew').addEventListener('click',()=>{ $('#projectStarterTitle').scrollIntoView?.({behavior:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',block:'start'}); $('#projectTitle').focus({preventScroll:true}); });
+$('#projectRefresh').addEventListener('click',()=>loadProjects({confirmDrafts:true}));
+for(const id of ['projectSearch','projectFilter','projectSort']) $(`#${id}`).addEventListener(id==='projectSearch' ? 'input' : 'change',updateProjectSummary);
+window.addEventListener('studio:projects-open',()=>loadProjects({confirmDrafts:true}));
 
 function updateSession(session) {
   const previous = user?.id;
   user = session?.user || null;
   if (previous !== user?.id) { ++accountGeneration; adminPurchaseOffset=0; catalogDrafts.clear(); catalogSelection=null; catalogSave=null; clearCatalogEditor(); $('#adminContent').hidden=true; adminRows=[]; $('#adminUsers').replaceChildren(); $('#adminPurchases').replaceChildren(); resetPremium(); }
   $('#purchaseFields').disabled = !user; $('#purchaseLogin').hidden = !!user;
-  $('#projectLoginNotice').hidden = !!user; $('#projectCreate').disabled = !user; $('#projectRefresh').disabled = !user;
+  $('#projectLoginNotice').hidden = !!user; $('#projectCreate').disabled = !user || !!projectBusy || projectLoading; $('#projectRefresh').disabled = !user || !!projectBusy || projectLoading;
   if (previous && previous !== user?.id) { $('#projectTitle').value=''; $('#projectDescription').value=''; }
-  if (previous !== user?.id) { ++projectGeneration; $('#projectList').replaceChildren(); $('#projectStatus').textContent = user ? 'برای دیدن پروژه‌ها به این صفحه بروید.' : 'برای ذخیره پروژه وارد حساب شوید.'; if (user && location.hash.startsWith('#/projects')) loadProjects(); }
+  if (previous !== user?.id) { ++projectGeneration; projectRows=[]; projectsLoaded=false; projectLoading=false; projectSetBusy(null); $('#projectCreateStatus').textContent=''; $('#projectSearch').value=''; $('#projectFilter').value='all'; $('#projectSort').value='recent'; $('#projectList').replaceChildren(); updateProjectSummary(); $('#projectStatus').textContent = user ? 'برای دیدن پروژه‌ها به این صفحه بروید.' : 'برای ذخیره پروژه وارد حساب شوید.'; if (user && location.hash.startsWith('#/projects')) loadProjects(); }
   if (previous !== user?.id) { purchaseStatus.textContent = ''; purchaseEmail.hidden = true; purchaseEmail.removeAttribute('href'); purchaseForm.reset(); loadPurchases(); }
   $('#authLoggedOut').hidden = !!user && !authBusy && !recoveryMode; $('#workspaceLoggedOut').hidden = !!user; $('#authLoggedIn').hidden = !user;
   $('#headerLogin').hidden = !!user; $('#headerAccount').hidden = !user;
@@ -622,7 +720,7 @@ $('#resetForm').addEventListener('submit', async event => {
   } catch { authStatus.dataset.kind = 'error'; authStatus.textContent = 'تغییر رمز ممکن نشد؛ دوباره تلاش کنید.'; }
   finally { authBusy = false; setAuthLoading($('#resetSubmit'), false, 'ذخیره رمز جدید'); }
 });
-$('#signOut').addEventListener('click', async () => { if (catalogDrafts.size && !window.confirm('پیش‌نویس‌های ذخیره‌نشده با خروج از بین می‌روند. خارج شوید؟')) return; intentionalSignOut = true; try { const { error } = await supabase.auth.signOut(); if (error) report(authStatus, error); else { updateSession(null); setGate(false); location.hash = '#/'; $('#sessionNotice').textContent = 'از حساب خارج شدید.'; } } finally { intentionalSignOut = false; } });
+$('#signOut').addEventListener('click', async () => { if ((catalogDrafts.size || projectHasDrafts() || $('#projectTitle').value.trim() || $('#projectDescription').value.trim()) && !window.confirm('پیش‌نویس‌ها و تغییرات ذخیره‌نشده با خروج از بین می‌روند. خارج شوید؟')) return; intentionalSignOut = true; try { const { error } = await supabase.auth.signOut(); if (error) report(authStatus, error); else { updateSession(null); setGate(false); location.hash = '#/'; $('#sessionNotice').textContent = 'از حساب خارج شدید.'; } } finally { intentionalSignOut = false; } });
 $('#noteForm').addEventListener('submit', async event => {
   event.preventDefault(); if (!user || saving) return;
   const content = $('#noteContent').value.trim(); if (!content) return;
@@ -635,7 +733,7 @@ $('#noteForm').addEventListener('submit', async event => {
 $('#notesMore').addEventListener('click', () => loadNotes(false));
 $('#notesRefresh').addEventListener('click', () => loadNotes());
 noteControls();
-window.addEventListener('beforeunload', event => { if (user && catalogDrafts.size) { event.preventDefault(); event.returnValue=''; } });
+window.addEventListener('beforeunload', event => { if (user && (catalogDrafts.size || projectHasDrafts() || $('#projectTitle').value.trim() || $('#projectDescription').value.trim())) { event.preventDefault(); event.returnValue=''; } });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && user) refreshAccount(); });
 refreshAccount();
 let authEventGeneration = 0;

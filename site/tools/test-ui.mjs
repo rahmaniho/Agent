@@ -572,7 +572,7 @@ test('projects create and update a cloud checklist with optimistic versioning', 
     assert.equal(records[0].description,'نیاز من'); assert.ok(records[0].checklist.some(step=>step.text.includes('امنیت حساب‌ها')));
     $('#projectList input').click(); await waitFor(()=>records[0].version===2);
     assert.equal(records[0].checklist[0].done,true); await waitFor(()=>$('#projectStatus').textContent==='پیشرفت ذخیره شد.');
-    $('#projectList details input').value='نام تازه'; $('#projectList details textarea').value='توضیح تازه'; $('#projectList details form').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    $('#projectList .project-editor input').value='نام تازه'; $('#projectList .project-editor textarea').value='توضیح تازه'; $('#projectList .project-editor form').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
     await waitFor(()=>records[0].version===3 && $('#projectList h3').textContent==='نام تازه'); assert.equal(records[0].description,'توضیح تازه');
     $('#projectList .project-add-step input').value='تهیه نسخه پشتیبان'; $('#projectList .project-add-step').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
     await waitFor(()=>records[0].version===4 && $('#projectList').textContent.includes('تهیه نسخه پشتیبان'));
@@ -580,7 +580,8 @@ test('projects create and update a cloud checklist with optimistic versioning', 
     records[0].version=5; records[0].description='تغییر از دستگاه دیگر';
     $('#projectList input[type=checkbox]').click();
     await waitFor(()=>$('#projectStatus').textContent.includes('دستگاه دیگری'));
-    assert.equal(records[0].version,5); assert.match($('#projectList').textContent,/تغییر از دستگاه دیگر/); await delay(50);
+    assert.equal(records[0].version,5); assert.ok($('#projectList .project-conflict')); $('#projectRefresh').click();
+    await waitFor(()=>$('#projectList').textContent.includes('تغییر از دستگاه دیگر')); await delay(50);
   } finally {dom.window.close();}
 });
 
@@ -889,5 +890,84 @@ test('a failed conflict reload retains the draft and can be retried without relo
     await waitFor(()=>!$('#adminContent').hidden && !$('#catalogReviewConflict').hidden);
     assert.equal($('#catalogReviewDescription').value,'متن من'); assert.match($('#catalogReviewLatest').textContent,/نسخهٔ دیگر/);
     await delay(30);
+  } finally {dom.window.close();}
+});
+
+test('project workspace filters, sorts, edits stages and deletes with version checks', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), records=[
+    {id:'a',title:'آلفا',description:'برنامه آموزشی',project_type:'website',version:1,updated_at:'2026-01-01T10:00:00Z',checklist:[{text:'تحقیق',done:false},{text:'تولید',done:false}]},
+    {id:'b',title:'بتا',description:'طراحی محصول',project_type:'website',version:1,updated_at:'2026-02-01T10:00:00Z',checklist:[{text:'یک',done:true},{text:'دو',done:false}]},
+    {id:'c',title:'گاما',description:'<img src=x onerror=alert(1)>',project_type:'website',version:1,updated_at:'2026-03-01T10:00:00Z',checklist:[{text:'پایان',done:true}]},
+  ]; let deleteVersion;
+  const session={user:{id:'member-1',email:'member@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table!=='studio_projects') return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+    return {select:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})}),
+      update:patch=>{let id,version; const chain={eq:(key,value)=>{if(key==='id') id=value; if(key==='version') version=value;return chain;},select:()=>({maybeSingle:async()=>{const row=records.find(r=>r.id===id && r.version===version); if(!row)return {data:null,error:null}; Object.assign(row,structuredClone(patch)); return {data:{version:row.version},error:null};}})};return chain;},
+      delete:()=>{let id,version; const chain={eq:(key,value)=>{if(key==='id') id=value; if(key==='version') version=value;return chain;},select:()=>({maybeSingle:async()=>{deleteVersion=version; const idx=records.findIndex(r=>r.id===id && r.version===version); if(idx<0)return {data:null,error:null};records.splice(idx,1);return {data:{id},error:null};}})};return chain;}};
+  }};
+  w.confirm=()=>true; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectList .project-card[data-project-id="a"]'));
+    assert.equal($('#projectStatTotal').textContent,'۳'); assert.equal($('#projectStatActive').textContent,'۱'); assert.equal($('#projectStatDone').textContent,'۱');
+    const a=()=>$('#projectList [data-project-id="a"]'), b=()=>$('#projectList [data-project-id="b"]'), c=()=>$('#projectList [data-project-id="c"]');
+    assert.equal(b().querySelector('progress').value,50); assert.match(b().querySelector('.project-next').textContent,/دو/);
+    assert.equal(c().querySelector('img'),null); assert.match(c().textContent,/<img src=x/);
+    $('#projectFilter').value='active'; $('#projectFilter').dispatchEvent(new w.Event('change')); assert.equal(a().hidden,true); assert.equal(b().hidden,false); assert.equal(c().hidden,true);
+    $('#projectFilter').value='all'; $('#projectFilter').dispatchEvent(new w.Event('change')); $('#projectSearch').value='آموزشی'; $('#projectSearch').dispatchEvent(new w.Event('input')); assert.equal(a().hidden,false); assert.equal(b().hidden,true);
+    $('#projectSearch').value='بی‌نتیجه'; $('#projectSearch').dispatchEvent(new w.Event('input')); assert.equal($('#projectEmpty').hidden,false);
+    $('#projectSearch').value=''; $('#projectSearch').dispatchEvent(new w.Event('input')); $('#projectSort').value='progress'; $('#projectSort').dispatchEvent(new w.Event('change')); assert.equal($('#projectList').firstElementChild.dataset.projectId,'c');
+    const first=a().querySelector('.project-step'); first.querySelector('.project-step-actions button').click(); first.querySelector('.project-step-edit input').value='پژوهش'; first.querySelector('.project-step-edit').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await waitFor(()=>records[0].version===2 && first.textContent.includes('پژوهش')); assert.equal(records[0].checklist[0].text,'پژوهش');
+    first.querySelectorAll('.project-step-actions button')[1].click(); await waitFor(()=>records[0].version===3 && a().querySelectorAll('.project-step').length===1); assert.equal(records[0].checklist.length,1);
+    a().querySelector('.project-step input[type=checkbox]').click(); await waitFor(()=>records[0].version===4 && a().querySelector('progress').value===100); assert.equal(a().querySelector('progress').value,100); assert.equal($('#projectStatDone').textContent,'۲');
+    a().querySelector('.project-delete').click(); await waitFor(()=>!$('#projectList [data-project-id="a"]')); assert.equal(deleteVersion,4); assert.equal($('#projectStatTotal').textContent,'۲');
+    await delay(50);
+  } finally {dom.window.close();}
+});
+
+test('project conflict keeps drafts, confirms refresh, and never leaks a late save to another user', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), records=[{id:'a',title:'پروژه',description:'اول',project_type:'website',version:1,checklist:[{text:'کار',done:false}]}];
+  let auth, allow=false, pending=null, writes=0;
+  const session={user:{id:'member-1',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table!=='studio_projects') return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+    return {select:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})}),update:patch=>{let version; const chain={eq:(key,value)=>{if(key==='version')version=value;return chain;},select:()=>({maybeSingle:async()=>{writes++;if(pending)return new Promise(resolve=>{pending=()=>resolve({data:{version:version+1},error:null});});const row=records.find(r=>r.version===version);if(!row)return {data:null,error:null};Object.assign(row,patch);return {data:{version:row.version},error:null};}})};return chain;}};
+  }};
+  w.confirm=()=>allow; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectList .project-card'));
+    $('#projectList .project-edit-title').value='پیش‌نویس خصوصی'; records[0].version=2; records[0].description='دستگاه دیگر';
+    $('#projectList input[type=checkbox]').click(); await waitFor(()=>$('#projectList .project-conflict'));
+    assert.equal($('#projectList .project-edit-title').value,'پیش‌نویس خصوصی'); assert.equal($('#projectList input[type=checkbox]').disabled,true);
+    $('#projectRefresh').click(); assert.equal($('#projectList .project-edit-title').value,'پیش‌نویس خصوصی');
+    allow=true; $('#projectRefresh').click(); await waitFor(()=>$('#projectList').textContent.includes('دستگاه دیگر'));
+    pending=true; $('#projectList input[type=checkbox]').click(); await waitFor(()=>typeof pending==='function');
+    assert.equal($('#projectRefresh').disabled,true); $('#projectList .project-editor form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); assert.equal(writes,2);
+    auth('SIGNED_OUT',null); assert.equal($('#projectList').children.length,0); pending(); await delay(50);
+    assert.equal($('#projectList').children.length,0); assert.equal($('#projectStatTotal').textContent,'—');
+  } finally {dom.window.close();}
+});
+
+test('project loading locks edits and a failed refresh leaves old data read-only for retry', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), records=[{id:'a',title:'پروژه',description:'اطلاعات پیشین',project_type:'website',version:1,checklist:[{text:'کار',done:false}]}];
+  let resolveLoad, loads=0, writes=0;
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:{user:{id:'member-1',email:'one@example.test'}}}})},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table!=='studio_projects') return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+    return {select:()=>({order:()=>({limit:async()=>{loads++; if(loads===2) return new Promise(resolve=>{resolveLoad=resolve}); return {data:structuredClone(records),error:null};}})}), update:()=>{writes++;throw new Error('must not write');}};
+  }};
+  w.confirm=()=>true; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectList .project-card'));
+    $('#projectList .project-edit-title').value='تغییر ذخیره‌نشده'; $('#projectRefresh').click(); await waitFor(()=>typeof resolveLoad==='function');
+    assert.equal($('#projectCreate').disabled,true); assert.equal($('#projectList input[type=checkbox]').disabled,true);
+    $('#projectList .project-editor form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); assert.equal(writes,0);
+    resolveLoad({error:{message:'offline'}}); await waitFor(()=>$('#projectStatus').textContent.includes('دریافت پروژه‌ها ممکن نشد'));
+    assert.equal($('#projectList .project-edit-title').value,'تغییر ذخیره‌نشده'); assert.equal($('#projectList input[type=checkbox]').disabled,true);
+    $('#projectRefresh').click(); await waitFor(()=>loads===3 && !$('#projectList input[type=checkbox]').disabled);
+    assert.equal($('#projectList .project-edit-title').value,'پروژه'); await delay(30);
   } finally {dom.window.close();}
 });
