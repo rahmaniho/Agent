@@ -188,22 +188,24 @@ test('a signed-in customer submits a manual payment reference', async () => {
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let onAuth; const calls=[];
   const session={user:{id:'member-1',email:'member@example.test'}};
   const client={auth:{onAuthStateChange:fn=>{onAuth=fn;},getSession:async()=>({data:{session}})},
-    rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:false,plan:'free'}]}; if(name==='studio_my_purchases') return {data:[]}; return {data:1,error:null};},
+    rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:false,plan:'free'}]}; if(name==='studio_my_purchases') return {data:[]}; if(name==='studio_prepare_receipt') return {data:'member-1/receipt-id',error:null}; return {data:1,error:null};},
+    storage:{from:()=>({remove:async()=>({error:null}),upload:async()=>({error:null})})},
     from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
   w.__client=client;
   w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
   try {
     await waitFor(()=>!$('#purchaseForm').hidden);
     $('#purchaseReference').value='receipt 123';
-    $('#purchasePayerEmail').value='payer@example.test'; $('#purchasePaidAt').value='2999-01-02T09:15';
+    $('#purchasePayerEmail').value='payer@example.test'; $('#purchaseDate').value='2999-01-02'; $('#purchaseTime').value='09:15';
+    $('#purchaseForm').reportValidity=()=>true; Object.defineProperty($('#purchaseReceipt'), 'files', {value:[new w.File(['png'], 'receipt.png', {type:'image/png'})]});
     $('#purchaseForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
     assert.match($('#purchaseStatus').textContent,/گذشته/);
-    assert.equal(calls.some(c=>c.name==='studio_submit_purchase'),false);
-    $('#purchasePaidAt').value='2024-01-02T09:15';
+    assert.equal(calls.some(c=>c.name==='studio_submit_purchase_with_receipt'),false);
+    $('#purchaseDate').value='2024-01-02';
     $('#purchaseForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
-    await waitFor(()=>$('#purchaseStatus').textContent.includes('درخواست ثبت شد'));
-    const sent=calls.find(c=>c.name==='studio_submit_purchase').args;
-    assert.equal(sent.reference,'receipt 123'); assert.equal(sent.payer_email,'payer@example.test'); assert.ok(!Number.isNaN(Date.parse(sent.paid_at)));
+    await waitFor(()=>$('#purchaseStatus').textContent.includes('برای بررسی به پنل مدیر ارسال شد'));
+    const sent=calls.find(c=>c.name==='studio_submit_purchase_with_receipt').args;
+    assert.equal(sent.reference,'receipt 123'); assert.equal(sent.receipt,'member-1/receipt-id'); assert.equal(sent.payer_email,'payer@example.test'); assert.ok(!Number.isNaN(Date.parse(sent.paid_at)));
     const email=$('#purchaseEmail'); assert.equal(email.hidden,false);
     const link=new URL(email.href); assert.equal(link.protocol,'mailto:'); assert.equal(link.pathname,'rahmani.hosseine@gmail.com');
     const body=link.searchParams.get('body'); assert.match(body,/receipt 123/); assert.match(body,/payer@example.test/); assert.match(body,/تومان/); assert.match(body,/زمان جهانی/);
@@ -230,7 +232,7 @@ test('manager reviews a purchase request with an expiry date', async () => {
   try {
     await waitFor(()=>$('#adminPurchases input'));
     assert.match($('#adminPurchases').textContent,/payer@example.test/); assert.match($('#adminPurchases').textContent,/receipt 123/); assert.ok($('#adminPurchases input').value);
-    $('#adminPurchases input').value='2099-01-01'; $('#adminPurchases button').click();
+    $('#adminPurchases input').value='2099-01-01'; [...$('#adminPurchases').querySelectorAll('button')].find(b=>b.textContent==='تأیید و فعال‌سازی').click();
     await waitFor(()=>calls.some(c=>c.name==='studio_review_purchase'));
     const call=calls.find(c=>c.name==='studio_review_purchase');
     assert.equal(call.args.decision,'approved'); assert.equal(call.args.request_id,1); assert.match(call.args.target_expiry,/2099-01-01/);
@@ -306,5 +308,75 @@ test('app-owned screens and sharing metadata omit source names while tool IDs re
     assert.doesNotMatch(w.document.querySelector('meta[name=description]').content, names);
     assert.doesNotMatch(w.document.querySelector('meta[property="og:title"]').content, names);
     const og = await readFile(new URL('assets/og.svg', site), 'utf8'); assert.doesNotMatch(og, names);
+  } finally {dom.window.close();}
+});
+
+test('plans are visible before sign-in and customer can return to free account creation', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:null}})},rpc:async()=>({data:[]}),from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client;
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>$('#authStatus').textContent==='');
+    assert.equal($('#loginGate').hidden,false); assert.match($('.entry-plans').textContent,/رایگان/); assert.match($('.entry-plans').textContent,/۹۹۰٬۰۰۰/);
+    $('#entryPlans').click(); assert.equal($('#loginGate').hidden,true); assert.equal(w.location.hash,'#/plans');
+    $('#purchaseOpenLogin').click(); assert.equal($('#loginGate').hidden,false); assert.match($('#signUp').textContent,/رایگان/);
+  } finally {dom.window.close();}
+});
+
+test('invalid receipt and upload failures do not submit a purchase', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[];
+  const session={user:{id:'member-1',email:'member@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:false,plan:'free'}]}; if(name==='studio_prepare_receipt') return {data:'member-1/receipt',error:null}; return {data:[]};},storage:{from:()=>({remove:async()=>({error:null}),upload:async()=>({error:{message:'network'}})})},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client;
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#purchaseForm').hidden); $('#purchaseForm').reportValidity=()=>true;
+    $('#purchaseReference').value='ref123'; $('#purchasePayerEmail').value='payer@example.test'; $('#purchaseDate').value='2024-01-02'; $('#purchaseTime').value='09:15';
+    let file=new w.File(['bad'],'bad.txt',{type:'text/plain'}); Object.defineProperty($('#purchaseReceipt'),'files',{get:()=>[file]});
+    $('#purchaseForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); assert.match($('#purchaseStatus').textContent,/JPG/);
+    assert.equal(calls.some(c=>c.name==='studio_prepare_receipt'),false);
+    file=new w.File(['img'],'receipt.png',{type:'image/png'});
+    $('#purchaseForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await waitFor(()=>$('#purchaseStatus').textContent.includes('بارگذاری فیش ممکن نشد'));
+    assert.equal(calls.some(c=>c.name==='studio_submit_purchase_with_receipt'),false);
+  } finally {dom.window.close();}
+});
+
+test('manager requests a short-lived private receipt link', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[];
+  const session={user:{id:'admin-1',email:'admin@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},
+    rpc:async(name,args)=>{calls.push({name,args}); if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]}; if(name==='studio_premium_catalog') return {data:[{catalog:data,playbooks}]}; if(name==='studio_admin_purchases') return {data:[{id:3,email:'member@example.test',payment_reference:'ref',amount_toman:990000}]}; if(name==='studio_admin_receipt') return {data:'member-1/receipt'}; return {data:[]};},
+    storage:{from:bucket=>({createSignedUrl:async(path,ttl)=>{calls.push({bucket,path,ttl});return {data:{signedUrl:'https://example.test/private'},error:null};}})},
+    from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client;
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>$('#adminPurchases .receipt-action')); $('#adminPurchases .receipt-action').click();
+    await waitFor(()=>$('#adminPurchases a[href="https://example.test/private"]'));
+    assert.equal(calls.find(c=>c.name==='studio_admin_receipt').args.request_id,3); assert.equal(calls.find(c=>c.ttl).ttl,60);
+  } finally {dom.window.close();}
+});
+
+test('uploaded brand is used in the interface, browser icon and install manifest', async () => {
+  const dom = page(), document = dom.window.document;
+  try {
+    assert.equal(document.querySelector('.login-brand-icon').getAttribute('src'), 'assets/brand-icon-192.png');
+    assert.equal(document.querySelector('.studio-logo img').getAttribute('src'), 'assets/brand-icon-192.png');
+    assert.equal(document.querySelector('.login-brand-logo').getAttribute('src'), 'assets/brand-logo.jpg');
+    assert.equal(document.querySelector('.dashboard-brand-visual img').getAttribute('src'), 'assets/brand-logo.jpg');
+    assert.equal(document.querySelector('link[rel="apple-touch-icon"]').getAttribute('href'), 'assets/brand-icon-180.png');
+    assert.equal(document.querySelector('meta[property="og:image"]').content, 'assets/brand-logo.jpg');
+    const manifest = JSON.parse(await readFile(new URL('manifest.webmanifest', site), 'utf8'));
+    for (const size of [192,512]) {
+      const icon = manifest.icons.find(i => i.sizes === `${size}x${size}` && i.purpose === 'any');
+      assert.ok(icon);
+      const png = await readFile(new URL(icon.src, site));
+      assert.equal(png.readUInt32BE(16),size); assert.equal(png.readUInt32BE(20),size);
+    }
+    const mask = manifest.icons.find(i => i.purpose === 'maskable'); assert.equal(mask.sizes,'512x512');
+    const sw = await readFile(new URL('sw.js', site), 'utf8');
+    for (const path of [...manifest.icons.map(i=>i.src), 'assets/brand-icon-48.png', 'assets/brand-icon-180.png', 'assets/brand-logo.jpg']) assert.ok(sw.includes(`'./${path}'`), path);
   } finally {dom.window.close();}
 });

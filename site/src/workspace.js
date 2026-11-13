@@ -14,14 +14,17 @@ const report = (el, error) => {
   else el.textContent = 'انجام درخواست ممکن نشد. اتصال و اطلاعات را بررسی کنید و دوباره تلاش کنید.';
 };
 const gate = $('#loginGate');
-function setGate(open) {
+function setGate(open, focusEmail = false) {
   gate.hidden = !open;
   document.body.classList.toggle('login-open', open);
   for (const node of document.body.children) if (node !== gate && node.tagName !== 'SCRIPT') node.inert = open;
-  if (open) setTimeout(() => $('#authEmail').focus(), 0);
+  if (open) setTimeout(() => { if (!gate.hidden) $(focusEmail ? '#authEmail' : '#entryPlans').focus(); }, 0);
 }
-$('#guestAccess').addEventListener('click', () => { try { sessionStorage.setItem('studio-guest', '1'); } catch {} setGate(false); });
-$('#openLogin').addEventListener('click', () => setGate(true));
+function continueAsGuest() { try { sessionStorage.setItem('studio-guest', '1'); } catch {} setGate(false); }
+$('#guestAccess').addEventListener('click', continueAsGuest);
+$('#entryPlans').addEventListener('click', () => { continueAsGuest(); location.hash = '#/plans'; });
+$('#purchaseOpenLogin').addEventListener('click', () => setGate(true, true));
+$('#openLogin').addEventListener('click', () => setGate(true, true));
 gate.addEventListener('keydown', event => {
   if (event.key !== 'Tab') return;
   const controls = Array.from(gate.querySelectorAll('input:not(:disabled),button:not(:disabled),a[href]')).filter(el => el.offsetParent !== null);
@@ -78,20 +81,40 @@ purchaseForm.addEventListener('submit', async event => {
   event.preventDefault(); if (!user || !purchaseForm.reportValidity()) return;
   const reference = $('#purchaseReference').value.trim();
   const payerEmail = $('#purchasePayerEmail').value.trim().toLowerCase();
-  const paid = new Date($('#purchasePaidAt').value);
+  const paid = new Date(`${$('#purchaseDate').value}T${$('#purchaseTime').value}`);
+  const receipt = $('#purchaseReceipt').files[0];
+  if (!receipt || !['image/jpeg', 'image/png', 'image/webp'].includes(receipt.type) || receipt.size < 1 || receipt.size > 5 * 1024 * 1024) { purchaseStatus.textContent = 'فیش باید تصویر JPG، PNG یا WebP و حداکثر ۵ مگابایت باشد.'; return; }
   if (Number.isNaN(paid.getTime()) || paid.getTime() > Date.now() + 5 * 60 * 1000) { purchaseStatus.textContent = 'تاریخ و ساعت واریز باید در گذشته باشد.'; return; }
   const who = user.id, accountEmail = user.email;
   const button = purchaseForm.querySelector('button'); button.disabled = true;
   purchaseStatus.textContent = 'در حال ثبت درخواست...'; purchaseEmail.hidden = true;
   try {
-    const {error} = await supabase.rpc('studio_submit_purchase', {reference, payer_email:payerEmail, paid_at:paid.toISOString()});
+    const prepared = await supabase.rpc('studio_prepare_receipt');
+    if (user?.id !== who) return;
+    if (prepared.error || !prepared.data) {
+      purchaseStatus.textContent = prepared.error?.code === '23505' ? 'یک درخواست در انتظار بررسی دارید.' : 'آماده‌سازی فیش ممکن نشد؛ دوباره تلاش کنید.';
+      return;
+    }
+    const path = prepared.data, bucket = supabase.storage.from('studio-payment-receipts');
+    // Remove an abandoned staged upload from a previous interrupted attempt before retrying.
+    const removed = await bucket.remove([path]);
+    if (user?.id !== who) return;
+    if (removed.error) { purchaseStatus.textContent = 'آماده‌سازی فیش ممکن نشد؛ دوباره تلاش کنید.'; return; }
+    const upload = await bucket.upload(path, receipt, {contentType:receipt.type, upsert:false});
+    if (user?.id !== who) return;
+    if (upload.error) { purchaseStatus.textContent = 'بارگذاری فیش ممکن نشد؛ تصویر و اتصال را بررسی کنید.'; return; }
+    purchaseStatus.textContent = 'فیش بارگذاری شد؛ در حال ارسال درخواست به مدیر...';
+    const {error} = await supabase.rpc('studio_submit_purchase_with_receipt', {reference, payer_email:payerEmail, paid_at:paid.toISOString(), receipt:path});
     if (user?.id !== who) return;
     if (error) {
-      purchaseStatus.textContent = error.code === '23505' ? 'یک درخواست در انتظار بررسی دارید.' : 'ثبت درخواست ممکن نشد؛ اطلاعات و اتصال را بررسی کنید.';
+      // Deletion is allowed only if the upload was not attached to a submitted request.
+      await bucket.remove([path]);
+      purchaseStatus.textContent = error.code === '23505' ? 'یک درخواست در انتظار بررسی دارید.' : 'ثبت درخواست ممکن نشد؛ پیش از تلاش دوباره وضعیت درخواست‌ها را بررسی کنید.';
+      await loadPurchases();
     } else {
       purchaseEmail.href = paymentMailto({payment_reference:reference,payer_email:payerEmail,paid_at:paid.toISOString(),amount_toman:990000},accountEmail);
       purchaseEmail.hidden = false; purchaseForm.reset();
-      purchaseStatus.textContent = 'درخواست ثبت شد. برای فرستادن ایمیل، دکمهٔ زیر را بزنید و پیام را ارسال کنید.';
+      purchaseStatus.textContent = 'درخواست و فیش برای بررسی به پنل مدیر ارسال شد. ایمیل اختیاری است و خودکار ارسال نمی‌شود.';
       await loadPurchases();
     }
   } catch { if (user?.id === who) purchaseStatus.textContent = 'ثبت درخواست ممکن نشد؛ اتصال را بررسی کنید.'; }
@@ -112,6 +135,25 @@ async function loadAdminPurchases(generation) {
     const time = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleString('fa-IR') : 'ثبت نشده';
     details.textContent = `کد پیگیری: ${request.payment_reference} | واریز: ${time} (زمان محلی مدیر) | ایمیل پرداخت‌کننده: ${request.payer_email || 'ثبت نشده'} | مبلغ: ${Number(request.amount_toman || 990000).toLocaleString('fa-IR')} تومان`;
     text.append(heading, details);
+    const receiptButton = document.createElement('button'); receiptButton.type = 'button'; receiptButton.className = 'receipt-action'; receiptButton.textContent = 'دریافت پیوند فیش';
+    receiptButton.addEventListener('click', async () => {
+      receiptButton.disabled = true;
+      try {
+        const {data:path, error} = await supabase.rpc('studio_admin_receipt', {request_id:request.id});
+        if (generation !== accountGeneration) return;
+        if (error) throw error;
+        if (!path) { receiptButton.textContent = 'برای این درخواست فیشی ثبت نشده است'; return; }
+        const signed = await supabase.storage.from('studio-payment-receipts').createSignedUrl(path, 60);
+        if (generation !== accountGeneration) return;
+        if (signed.error || !signed.data?.signedUrl) throw signed.error || new Error('No receipt URL');
+        const link = document.createElement('a'); link.href = signed.data.signedUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'باز کردن فیش (معتبر تا یک دقیقه)';
+        text.append(link);
+        receiptButton.textContent = 'دریافت دوباره پیوند فیش';
+        setTimeout(() => link.remove(), 60000);
+      } catch { $('#adminPurchaseStatus').textContent = 'دریافت فیش ممکن نشد؛ دوباره تلاش کنید.'; }
+      finally { receiptButton.disabled = false; }
+    });
+    text.append(receiptButton);
     const date = document.createElement('input'); date.type = 'date';
     const nextYear = new Date(); nextYear.setUTCFullYear(nextYear.getUTCFullYear() + 1); date.value = nextYear.toISOString().slice(0, 10); date.setAttribute('aria-label', `پایان اشتراک ${request.email || 'کاربر'}`);
     const approve = document.createElement('button'); approve.type = 'button'; approve.textContent = 'تأیید و فعال‌سازی';

@@ -1,9 +1,9 @@
 /* Static application cache. API calls and user data are never cached. */
-const CACHE = 'agent-studio-v11';
+const CACHE = 'agent-studio-v13';
 const ASSETS = [
   './', './index.html', './assets/styles.css', './assets/studio.css', './assets/refinement.css', './assets/app.js', './assets/lazy.js',
   './assets/entry.css', './assets/studio-illustration.png', './assets/workspace.js', './assets/agent.js', './assets/data.json', './assets/playbooks.json',
-  './assets/favicon.svg', './assets/og.svg', './assets/fonts/vazirmatn-arabic-wght-normal.woff2', './assets/fonts/vazirmatn-latin-wght-normal.woff2', './manifest.webmanifest',
+  './assets/favicon.svg', './assets/brand-logo.jpg', './assets/brand-icon-48.png', './assets/brand-icon-180.png', './assets/brand-icon-192.png', './assets/brand-icon-512.png', './assets/brand-icon-maskable-512.png', './assets/og.svg', './assets/fonts/vazirmatn-arabic-wght-normal.woff2', './assets/fonts/vazirmatn-latin-wght-normal.woff2', './manifest.webmanifest',
 ];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => Promise.allSettled(ASSETS.map(path => cache.add(path)))).then(() => self.skipWaiting()));
