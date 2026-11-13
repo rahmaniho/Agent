@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // gen-data.mjs — ساخت دادهٔ سایت از یک checkout از ریپوی ECC
-// استفاده: node site/tools/gen-data.mjs --src /path/to/ecc [--out site/assets/data.js]
-import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+// استفاده: node site/tools/gen-data.mjs --src /path/to/ecc --out /private/path/data.json
+import { readdirSync, readFileSync, writeFileSync, statSync, existsSync, realpathSync } from "node:fs";
+import { join, resolve, dirname, relative, isAbsolute, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -13,7 +13,15 @@ const arg = (name, def) => {
 };
 
 const SRC = resolve(arg("src", join(here, "..", "..", "..", "ecc")));
-const OUT = resolve(arg("out", join(here, "..", "assets", "data.json")));
+const output = arg("out", "");
+if (!output) { console.error("[gen-data] --out must point to a private location outside this repository"); process.exit(1); }
+const OUT = resolve(output);
+const repoRoot = resolve(here, "..", "..");
+const actualOutput = existsSync(OUT) ? realpathSync(OUT) : join(realpathSync(dirname(OUT)), basename(OUT));
+const rel = relative(realpathSync(repoRoot), actualOutput);
+if (!rel || (!rel.startsWith(".." + '/') && rel !== ".." && !isAbsolute(rel))) {
+  console.error("[gen-data] refusing to write full catalog inside the public repository"); process.exit(1);
+}
 
 if (!existsSync(join(SRC, "skills"))) {
   console.error(`[gen-data] skills/ پیدا نشد در: ${SRC}\n  از --src /path/to/ecc استفاده کنید.`);
@@ -73,5 +81,5 @@ const payload = {
   agents,
 };
 
-writeFileSync(OUT, JSON.stringify(payload, null, 0) + "\n");
+writeFileSync(OUT, JSON.stringify(payload, null, 0) + "\n", {mode:0o600, flag:"wx"});
 console.log(`[gen-data] ${payload.counts.skills} skills, ${payload.counts.commands} commands, ${payload.counts.agents} agents → ${OUT}`);

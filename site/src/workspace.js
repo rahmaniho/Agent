@@ -44,6 +44,7 @@ $('#guestAccess').addEventListener('click', () => { if (!authBusy) { recoveryMod
 $('#headerLogin').addEventListener('click', openLogin);
 $('#purchaseOpenLogin').addEventListener('click', openLogin);
 $('#openLogin').addEventListener('click', openLogin);
+$('#projectLogin').addEventListener('click', openLogin);
 $('#togglePassword').addEventListener('click', () => {
   const input = $('#authPassword'), visible = input.type === 'password';
   input.type = visible ? 'text' : 'password';
@@ -71,7 +72,7 @@ if (window.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches && !windo
   }, {passive:true});
   gate.addEventListener('pointerleave', () => { for (const key of ['--sphere-x','--sphere-y','--card-x','--card-y','--glow-x','--glow-y']) gate.style.removeProperty(key); });
 }
-let accountGeneration = 0, adminRows = [], expiryTimer;
+let accountGeneration = 0, adminRows = [], expiryTimer, projectGeneration = 0, adminPurchaseGeneration = 0, adminPurchaseOffset = 0;
 function publishCatalog(payload) {
   window.studioCatalog = payload;
   window.dispatchEvent(new CustomEvent('studio:catalog', {detail: payload}));
@@ -100,14 +101,14 @@ async function loadPurchases() {
   $('#purchaseHistory').replaceChildren();
   if (!user) return;
   const who = user.id;
-  const {data, error} = await supabase.rpc('studio_my_purchases');
+  const {data, error} = await supabase.rpc('studio_my_purchases_v2');
   if (user?.id !== who) return;
   if (error) { report(purchaseStatus, error); return; }
   for (const row of data || []) {
     const item = document.createElement('li');
     const names = {pending:'در انتظار بررسی',approved:'تأیید شده',rejected:'رد شده'};
     const details = document.createElement('span');
-    details.textContent = `${names[row.status] || 'نامشخص'} — ${row.payment_reference}`;
+    details.textContent = `${names[row.status] || 'نامشخص'} — ${row.payment_reference}${row.status === 'rejected' && row.rejection_reason ? ` · دلیل: ${row.rejection_reason}` : ''}`;
     item.append(details);
     const href = row.status === 'pending' && paymentMailto(row, user.email);
     if (href) { const link = document.createElement('a'); link.href = href; link.textContent = 'نوشتن ایمیل به مدیر'; item.append(link); }
@@ -158,11 +159,14 @@ purchaseForm.addEventListener('submit', async event => {
   finally { button.disabled = false; }
 });
 async function loadAdminPurchases(generation) {
+  const requestGeneration = ++adminPurchaseGeneration;
   const host = $('#adminPurchases'); host.replaceChildren(); $('#adminPurchaseStatus').textContent = 'در حال دریافت درخواست‌ها...';
-  const {data,error} = await supabase.rpc('studio_admin_purchases');
-  if (generation !== accountGeneration) return;
+  $('#adminPurchasesPrev').disabled = true; $('#adminPurchasesNext').disabled = true;
+  const {data,error} = await supabase.rpc('studio_admin_purchases_v3', {filter_status: $('#adminPurchaseFilter').value, page_offset:adminPurchaseOffset});
+  if (generation !== accountGeneration || requestGeneration !== adminPurchaseGeneration) return;
   if (error) { report($('#adminPurchaseStatus'), error); return; }
-  $('#adminPurchaseStatus').textContent = data?.length ? `${faNumber(data.length)} درخواست در انتظار بررسی` : 'درخواستی در انتظار بررسی نیست.';
+  $('#adminPurchaseStatus').textContent = data?.length ? `درخواست‌های ${faNumber(adminPurchaseOffset+1)} تا ${faNumber(adminPurchaseOffset+data.length)}` : 'درخواستی در این صفحه یافت نشد.';
+  $('#adminPurchasesPrev').disabled = adminPurchaseOffset===0; $('#adminPurchasesNext').disabled = (data?.length || 0)<50;
   for (const request of data || []) {
     const row = document.createElement('div'); row.className = 'pending-row';
     const text = document.createElement('div'); text.className = 'pending-details';
@@ -172,6 +176,7 @@ async function loadAdminPurchases(generation) {
     const time = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleString('fa-IR') : 'ثبت نشده';
     details.textContent = `کد پیگیری: ${request.payment_reference} | واریز: ${time} (زمان محلی مدیر) | ایمیل پرداخت‌کننده: ${request.payer_email || 'ثبت نشده'} | مبلغ: ${Number(request.amount_toman || 990000).toLocaleString('fa-IR')} تومان`;
     text.append(heading, details);
+    const stateLine = document.createElement('span'); stateLine.textContent = `وضعیت: ${{pending:'در انتظار بررسی',approved:'تأیید شده',rejected:'رد شده'}[request.status] || 'نامشخص'}${request.review_note ? ` | یادداشت مدیر: ${request.review_note}` : ''}${request.rejection_reason ? ` | دلیل رد: ${request.rejection_reason}` : ''}`; text.append(stateLine);
     const receiptButton = document.createElement('button'); receiptButton.type = 'button'; receiptButton.className = 'receipt-action'; receiptButton.textContent = 'دریافت پیوند فیش';
     receiptButton.addEventListener('click', async () => {
       receiptButton.disabled = true;
@@ -191,6 +196,8 @@ async function loadAdminPurchases(generation) {
       finally { receiptButton.disabled = false; }
     });
     text.append(receiptButton);
+    const note = document.createElement('textarea'); note.placeholder = 'یادداشت داخلی بررسی (اختیاری)'; note.maxLength=2000; note.setAttribute('aria-label','یادداشت داخلی بررسی');
+    const reason = document.createElement('textarea'); reason.placeholder = 'دلیل رد (برای رد درخواست ضروری و برای کاربر قابل مشاهده)'; reason.maxLength=1000; reason.setAttribute('aria-label','دلیل رد درخواست');
     const date = document.createElement('input'); date.type = 'date';
     const nextYear = new Date(); nextYear.setUTCFullYear(nextYear.getUTCFullYear() + 1); date.value = nextYear.toISOString().slice(0, 10); date.setAttribute('aria-label', `پایان اشتراک ${request.email || 'کاربر'}`);
     const approve = document.createElement('button'); approve.type = 'button'; approve.textContent = 'تأیید و فعال‌سازی';
@@ -198,14 +205,15 @@ async function loadAdminPurchases(generation) {
     async function review(decision) {
       const expiry = decision === 'approved' && date.value ? new Date(`${date.value}T23:59:59Z`) : null;
       if (decision === 'approved' && (!expiry || Number.isNaN(expiry.getTime()) || expiry <= new Date())) { $('#adminPurchaseStatus').textContent = 'تاریخ پایان در آینده را انتخاب کنید.'; return; }
+      if (decision === 'rejected' && !reason.value.trim()) { $('#adminPurchaseStatus').textContent = 'برای رد درخواست، دلیل رد را بنویسید.'; reason.focus(); return; }
       if (!window.confirm(decision === 'approved' ? 'پرداخت را بررسی کرده‌اید و می‌خواهید اشتراک را فعال کنید؟' : 'این درخواست رد شود؟')) return;
       approve.disabled = true; reject.disabled = true;
-      const {error} = await supabase.rpc('studio_review_purchase', {request_id:request.id,decision,target_expiry:expiry?.toISOString() || null});
+      const {error} = await supabase.rpc('studio_review_purchase_v2', {request_id:request.id,decision,target_expiry:expiry?.toISOString() || null,note:note.value.trim(),reason:reason.value.trim()});
       if (error) { report($('#adminPurchaseStatus'), error); approve.disabled = false; reject.disabled = false; }
       else await refreshAccount();
     }
     approve.addEventListener('click', () => review('approved')); reject.addEventListener('click', () => review('rejected'));
-    row.append(text,date,approve,reject); host.append(row);
+    row.append(text); if (request.status === 'pending') row.append(note,reason,date,approve,reject); host.append(row);
   }
 }
 
@@ -234,21 +242,31 @@ function drawAdmin() {
       else { $('#adminStatus').textContent = 'تغییر طرح ذخیره شد.'; await refreshAccount(); }
     }
     plus.addEventListener('click', () => change('plus')); free.addEventListener('click', () => change('free'));
-    actions.append(date, plus, free); tr.append(actions); body.append(tr);
+    const history = document.createElement('button'); history.type='button'; history.textContent='تاریخچه';
+    history.addEventListener('click', async () => {
+      history.disabled=true; const generation=accountGeneration;
+      try { const {data,error}=await supabase.rpc('studio_admin_subscription_history',{target_user:row.user_id}); if (generation!==accountGeneration) return; if(error) throw error; const lines=(data||[]).map(x => `${new Date(x.changed_at).toLocaleString('fa-IR')} · ${x.previous_plan || 'بدون طرح'} ← ${x.new_plan}${x.new_expiry ? ` · پایان: ${new Date(x.new_expiry).toLocaleDateString('fa-IR')}` : ''}`); window.alert(lines.length ? lines.join('\n') : 'تاریخچه‌ای پس از فعال‌سازی این قابلیت ثبت نشده است.'); } catch { $('#adminStatus').textContent='دریافت تاریخچه ممکن نشد.'; } finally { history.disabled=false; }
+    });
+    actions.append(date, plus, free, history); tr.append(actions); body.append(tr);
   });
 }
 $('#adminSearch').addEventListener('input', drawAdmin);
+$('#adminPurchaseFilter').addEventListener('change', () => { adminPurchaseOffset=0; if (!$('#adminContent').hidden) loadAdminPurchases(accountGeneration); });
+$('#adminPurchasesPrev').addEventListener('click', () => { adminPurchaseOffset=Math.max(0,adminPurchaseOffset-50); loadAdminPurchases(accountGeneration); });
+$('#adminPurchasesNext').addEventListener('click', () => { adminPurchaseOffset+=50; loadAdminPurchases(accountGeneration); });
 async function refreshAccount() {
   const generation = ++accountGeneration;
   $('#adminContent').hidden = true; adminRows = []; $('#adminUsers').replaceChildren(); $('#adminPurchases').replaceChildren();
-  if (!user) { resetPremium(); $('#adminStatus').textContent = 'برای بررسی دسترسی، وارد حساب خود شوید.'; $('#accountPlan').textContent = '—'; return; }
+  if (!user) { $('#accountReminder').textContent = ''; $('#accountExpiry').textContent = ''; resetPremium(); $('#adminStatus').textContent = 'برای بررسی دسترسی، وارد حساب خود شوید.'; $('#accountPlan').textContent = '—'; return; }
   $('#accountPlan').textContent = 'در حال بررسی...';
   const {data, error} = await supabase.rpc('studio_my_account');
   if (generation !== accountGeneration) return;
-  if (error || !data?.length) { resetPremium(); $('#accountPlan').textContent = 'وضعیت اشتراک قابل دریافت نیست.'; $('#adminStatus').textContent = 'بررسی دسترسی ممکن نشد. دوباره تلاش کنید.'; return; }
+  if (error || !data?.length) { $('#accountReminder').textContent = ''; $('#accountExpiry').textContent = ''; resetPremium(); $('#accountPlan').textContent = 'وضعیت اشتراک قابل دریافت نیست.'; $('#adminStatus').textContent = 'بررسی دسترسی ممکن نشد. دوباره تلاش کنید.'; return; }
   const account = data[0];
   $('#accountPlan').textContent = account.plan === 'plus' ? 'پلاس فعال' : 'رایگان';
   $('#accountExpiry').textContent = account.plan === 'plus' && account.expires_at ? `تا ${new Date(account.expires_at).toLocaleDateString('fa-IR')}` : '';
+  const remainingDays = account.plan === 'plus' && account.expires_at ? Math.ceil((new Date(account.expires_at).getTime() - Date.now()) / 86400000) : null;
+  $('#accountReminder').textContent = remainingDays !== null && remainingDays > 0 && remainingDays <= 30 ? `یادآوری: ${faNumber(remainingDays)} روز تا پایان اشتراک باقی مانده است.` : '';
   if (account.is_admin || account.plan === 'plus') {
     const full = await supabase.rpc('studio_premium_catalog');
     if (generation !== accountGeneration) return;
@@ -308,11 +326,105 @@ async function loadNotes(reset = true) {
     li.append(body, button); $('#notesList').append(li);
   });
 }
+async function loadProjects() {
+  const request=++projectGeneration, who=user?.id, host=$('#projectList'); host.replaceChildren();
+  if (!who) { $('#projectStatus').textContent='برای ذخیره پروژه وارد حساب شوید.'; return; }
+  $('#projectStatus').textContent='در حال دریافت پروژه‌ها...';
+  try {
+    const {data,error}=await supabase.from('studio_projects').select('id,title,description,project_type,checklist,version,updated_at').order('updated_at',{ascending:false}).limit(100);
+    if (request!==projectGeneration || user?.id!==who) return;
+    if(error) throw error;
+    $('#projectStatus').textContent=data?.length ? `${faNumber(data.length)} پروژه نمایش داده شد.` : 'هنوز پروژه‌ای ذخیره نشده است.';
+    for (const project of data || []) {
+      const card=document.createElement('article'); card.className='project-card';
+      const title=document.createElement('h3'); title.textContent=project.title;
+      const description=document.createElement('p'); description.textContent=project.description || 'بدون توضیح';
+      const link=document.createElement('a'); link.href=`#/s/${encodeURIComponent(project.project_type)}`; link.textContent='باز کردن مسیر مرتبط ←';
+      const list=document.createElement('ul');
+      for (const [index,step] of (Array.isArray(project.checklist) ? project.checklist : []).entries()) {
+        if (!step || typeof step.text!=='string') continue;
+        const li=document.createElement('li'), label=document.createElement('label'), check=document.createElement('input'), text=document.createElement('span');
+        check.type='checkbox'; check.checked=step.done===true; text.textContent=step.text;
+        check.addEventListener('change', async () => {
+          check.disabled=true; const next=project.checklist.map((s,i)=>i===index?{text:s.text,done:check.checked}:s);
+          try {
+            const result=await supabase.from('studio_projects').update({checklist:next,version:project.version+1,updated_at:new Date().toISOString()}).eq('id',project.id).eq('version',project.version).select('version').maybeSingle();
+            if(user?.id!==who || request!==projectGeneration) return;
+            if(result.error) throw result.error;
+            if(!result.data) { await loadProjects(); if(user?.id===who) $('#projectStatus').textContent='پروژه در دستگاه دیگری تغییر کرده است؛ اطلاعات تازه بارگذاری شد. تغییر خود را دوباره اعمال کنید.'; return; }
+            project.version=result.data.version; project.checklist=next; $('#projectStatus').textContent='پیشرفت ذخیره شد.';
+          } catch { if(user?.id===who) {check.checked=!check.checked; $('#projectStatus').textContent='ذخیره پیشرفت ممکن نشد؛ اتصال را بررسی کنید.';} } finally {check.disabled=false;}
+        });
+        label.append(check,text);li.append(label);list.append(li);
+      }
+      const addStep=document.createElement('form'); addStep.className='project-add-step';
+      const stepInput=document.createElement('input'); stepInput.placeholder='مرحلهٔ دلخواه'; stepInput.setAttribute('aria-label','مرحلهٔ دلخواه'); stepInput.maxLength=200; stepInput.required=true;
+      const addButton=document.createElement('button'); addButton.type='submit'; addButton.className='btn btn--outline'; addButton.textContent='افزودن مرحله';
+      addStep.append(stepInput,addButton);
+      addStep.addEventListener('submit',async event=>{
+        event.preventDefault(); const text=stepInput.value.trim();
+        if(!text) { $('#projectStatus').textContent='متن مرحله را وارد کنید.'; return; }
+        if(project.checklist.length>=50) { $('#projectStatus').textContent='هر پروژه حداکثر ۵۰ مرحله دارد.'; return; }
+        addButton.disabled=true;
+        try {
+          const next=[...project.checklist,{text,done:false}];
+          const result=await supabase.from('studio_projects').update({checklist:next,version:project.version+1,updated_at:new Date().toISOString()}).eq('id',project.id).eq('version',project.version).select('version').maybeSingle();
+          if(user?.id!==who || request!==projectGeneration) return;
+          if(result.error) throw result.error;
+          if(!result.data) { await loadProjects(); if(user?.id===who) $('#projectStatus').textContent='پروژه در دستگاه دیگری تغییر کرده است؛ اطلاعات تازه بارگذاری شد. تغییر خود را دوباره اعمال کنید.'; return; }
+          await loadProjects(); if(user?.id===who) $('#projectStatus').textContent='مرحله افزوده شد.';
+        } catch { if(user?.id===who) $('#projectStatus').textContent='افزودن مرحله ممکن نشد؛ اتصال را بررسی کنید.'; }
+        finally {addButton.disabled=false;}
+      });
+      const editor=document.createElement('details'); editor.className='project-editor';
+      const summary=document.createElement('summary'); summary.textContent='ویرایش نام و توضیح';
+      const form=document.createElement('form'); form.className='studio-form';
+      const titleLabel=document.createElement('label'); titleLabel.textContent='نام پروژه';
+      const titleInput=document.createElement('input'); titleInput.value=project.title; titleInput.required=true; titleInput.maxLength=120; titleLabel.append(titleInput);
+      const descriptionLabel=document.createElement('label'); descriptionLabel.textContent='توضیح پروژه';
+      const descriptionInput=document.createElement('textarea'); descriptionInput.value=project.description; descriptionInput.maxLength=3000; descriptionInput.rows=3; descriptionLabel.append(descriptionInput);
+      const save=document.createElement('button'); save.type='submit'; save.className='btn btn--outline'; save.textContent='ذخیره تغییرات';
+      form.append(titleLabel,descriptionLabel,save); editor.append(summary,form);
+      form.addEventListener('submit', async event=>{
+        event.preventDefault(); const nextTitle=titleInput.value.trim();
+        if(!nextTitle) { $('#projectStatus').textContent='نام پروژه را وارد کنید.'; titleInput.focus(); return; }
+        save.disabled=true;
+        try {
+          const result=await supabase.from('studio_projects').update({title:nextTitle,description:descriptionInput.value.trim(),version:project.version+1,updated_at:new Date().toISOString()}).eq('id',project.id).eq('version',project.version).select('version').maybeSingle();
+          if(user?.id!==who || request!==projectGeneration) return;
+          if(result.error) throw result.error;
+          if(!result.data) { await loadProjects(); if(user?.id===who) $('#projectStatus').textContent='پروژه در دستگاه دیگری تغییر کرده است؛ اطلاعات تازه بارگذاری شد. تغییر خود را دوباره اعمال کنید.'; return; }
+          project.version=result.data.version; project.title=nextTitle; project.description=descriptionInput.value.trim(); title.textContent=project.title; description.textContent=project.description || 'بدون توضیح'; editor.open=false; $('#projectStatus').textContent='تغییرات پروژه ذخیره شد.';
+        } catch { if(user?.id===who) $('#projectStatus').textContent='ذخیره پروژه ممکن نشد؛ اتصال را بررسی کنید.'; }
+        finally {save.disabled=false;}
+      });
+      const remove=document.createElement('button'); remove.type='button'; remove.className='btn btn--outline'; remove.textContent='حذف پروژه';
+      remove.addEventListener('click',async()=>{ if(!window.confirm('این پروژه و چک‌لیست آن حذف شود؟')) return; remove.disabled=true; try {const {error}=await supabase.from('studio_projects').delete().eq('id',project.id); if(user?.id!==who) return; if(error) throw error; await loadProjects();} catch {if(user?.id===who) $('#projectStatus').textContent='حذف پروژه ممکن نشد.';} finally {remove.disabled=false;} });
+      card.append(title,description,link,list,addStep,editor,remove);host.append(card);
+    }
+  } catch { if(request===projectGeneration && user?.id===who) $('#projectStatus').textContent='دریافت پروژه‌ها ممکن نشد؛ اتصال را بررسی کنید.'; }
+}
+$('#projectForm').addEventListener('submit',async event=>{
+  event.preventDefault(); if(!user || !event.currentTarget.reportValidity()) return;
+  const who=user.id, button=$('#projectCreate'); button.disabled=true; $('#projectStatus').textContent='در حال ذخیره پروژه...';
+  try {
+    const {error}=await supabase.from('studio_projects').insert({title:$('#projectTitle').value.trim(),description:$('#projectDescription').value.trim(),project_type:$('#projectType').value,checklist:Array.from(document.querySelectorAll('#projectSuggestion li'), node=>({text:node.textContent,done:false}))});
+    if(user?.id!==who) return; if(error) throw error;
+    $('#projectTitle').value=''; $('#projectDescription').value=''; await loadProjects();
+  } catch {if(user?.id===who) $('#projectStatus').textContent='ذخیره پروژه ممکن نشد؛ اتصال و اطلاعات را بررسی کنید.';}
+  finally {button.disabled=!user;}
+});
+$('#projectRefresh').addEventListener('click',loadProjects);
+window.addEventListener('studio:projects-open',loadProjects);
+
 function updateSession(session) {
   const previous = user?.id;
   user = session?.user || null;
-  if (previous !== user?.id) { ++accountGeneration; resetPremium(); }
+  if (previous !== user?.id) { ++accountGeneration; adminPurchaseOffset=0; resetPremium(); }
   $('#purchaseFields').disabled = !user; $('#purchaseLogin').hidden = !!user;
+  $('#projectLoginNotice').hidden = !!user; $('#projectCreate').disabled = !user; $('#projectRefresh').disabled = !user;
+  if (previous && previous !== user?.id) { $('#projectTitle').value=''; $('#projectDescription').value=''; }
+  if (previous !== user?.id) { ++projectGeneration; $('#projectList').replaceChildren(); $('#projectStatus').textContent = user ? 'برای دیدن پروژه‌ها به این صفحه بروید.' : 'برای ذخیره پروژه وارد حساب شوید.'; if (user && location.hash.startsWith('#/projects')) loadProjects(); }
   if (previous !== user?.id) { purchaseStatus.textContent = ''; purchaseEmail.hidden = true; purchaseEmail.removeAttribute('href'); purchaseForm.reset(); loadPurchases(); }
   $('#authLoggedOut').hidden = !!user && !authBusy && !recoveryMode; $('#workspaceLoggedOut').hidden = !!user; $('#authLoggedIn').hidden = !user;
   $('#headerLogin').hidden = !!user; $('#headerAccount').hidden = !user;

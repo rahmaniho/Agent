@@ -44,6 +44,8 @@ const state = {
   libLimit: 60,
   libOnlyMine: false,
   libCategory: "all",
+  libLevel: "all",
+  libFavorites: false,
   current: null,
   entitled: false,
 };
@@ -247,6 +249,27 @@ function selectLibraryTopic(id) {
   renderLibrary();
 }
 
+function renderProjectSuggestion() {
+  const type = $("#projectType"), old = type.value;
+  type.innerHTML = state.services.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join("");
+  if (state.services.some(s => s.id === old)) type.value = old;
+  const s = state.services.find(x => x.id === type.value);
+  if (!s) { $("#projectSuggestion").textContent = "موضوعی در دسترس نیست."; return; }
+  const skills = (s.skills || []).filter(name => skillSet.has(name)).slice(0,5);
+  const selected = new Set($$('input[name="projectNeed"]:checked').map(input => input.value));
+  const stages = ["هدف و نیازها را مشخص کنید", "پیش‌نیازها را آماده کنید"];
+  for (const step of s.steps || []) if (step.simpleTitle && !stages.includes(step.simpleTitle)) stages.push(step.simpleTitle);
+  if (selected.has("design")) stages.push("طرح رابط و صفحه‌ها را مشخص کنید");
+  if (selected.has("data")) stages.push("اطلاعات، دسترسی و پشتیبان‌گیری را طراحی کنید");
+  if (selected.has("accounts")) stages.push("ورود، نقش‌ها و امنیت حساب‌ها را طراحی کنید");
+  stages.push("نسخه اولیه را بسازید", "کار را آزمایش و اصلاح کنید");
+  if (selected.has("publish")) stages.push("میزبانی و انتشار امن را آماده کنید");
+  else stages.push("برای تحویل آماده شوید");
+  $("#projectSuggestion").innerHTML = `<strong>پیشنهاد برای ${esc(s.title)}</strong><p><b>پیش‌نیازها:</b> ${esc(NEEDS[s.id] || "هدف، مخاطب و امکانات مورد نیاز را مشخص کنید.")}</p><p><b>ابزارهای در دسترس:</b> ${skills.length ? skills.map(x => esc(toolLabel(x))).join("، ") : "در این سطح نمونه‌ای برای این موضوع موجود نیست."}</p><b>نقشه راه اولیه</b><ol>${stages.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`;
+}
+$("#projectType").addEventListener("change", renderProjectSuggestion);
+$$('input[name="projectNeed"]').forEach(input => input.addEventListener("change", renderProjectSuggestion));
+
 function renderPopular() {
   const popular = ["website", "webapp", "api", "harness"].map((id) => state.services.find((s) => s.id === id)).filter(Boolean);
   $("#popularCards").innerHTML = popular.map((s) => cardHtml(s, true)).join("");
@@ -378,6 +401,38 @@ function myNames(kind) {
   return set;
 }
 
+// Only explicitly reviewed examples have a level and a specific Persian explanation.
+// Unreviewed catalog items are not guessed or machine-translated.
+const LIB_REVIEW = {
+  accessibility: ["beginner", "برای دسترسی آسان، صفحه‌ها را برای افراد با نیازهای مختلف قابل استفاده‌تر می‌کند."],
+  benchmark: ["advanced", "سرعت و عملکرد را اندازه می‌گیرد تا بتوانید تغییرات را مقایسه کنید."],
+  "browser-qa": ["advanced", "پس از انتشار، بخش‌های مختلف رابط را در مرورگر بررسی می‌کند."],
+  "click-path-audit": ["advanced", "مسیر کاربر و نتیجهٔ کلیک‌ها را برای پیدا کردن خطا بررسی می‌کند."],
+  "design-system": ["advanced", "رنگ‌ها، فاصله‌ها و اجزای رابط را برای هماهنگی طراحی بررسی می‌کند."],
+  "agent-architecture-audit": ["advanced", "ساختار برنامهٔ ایجنت را برای یافتن ایرادهای معماری، حافظه و ابزارها بررسی می‌کند."],
+  "agent-eval": ["advanced", "عملکرد چند ایجنت را روی کارهای مشخص با معیارهایی مانند کیفیت، هزینه و زمان مقایسه می‌کند."],
+  "agent-harness-construction": ["advanced", "به طراحی ابزارها و محیطی کمک می‌کند که ایجنت در آن وظایفش را انجام می‌دهد."],
+  "agent-introspection-debugging": ["advanced", "برای ثبت، تشخیص و رفع مرحله‌ای خطاهای اجرای ایجنت راهنما می‌دهد."],
+  "agent-payment-x402": ["advanced", "برای افزودن پرداخت x402 به ایجنت، کنترل بودجه و کیف پول را راهنمایی می‌کند."],
+  "agent-runtime-gateway-smoke-test": ["advanced", "اتصال محلی ایجنت و درگاه و بازگشت پاسخ از محیط راه‌دور را با یک آزمون ساده بررسی می‌کند."],
+  "frontend-design-direction": ["beginner", "پیش از طراحی رابط، هدف، مخاطب و سبک مناسب پروژه را مشخص می‌کند."],
+  "frontend-patterns": ["advanced", "الگوهای ساخت و بهبود بخش کاربری برنامه‌های React و Next.js را پیشنهاد می‌کند."],
+  "make-interfaces-feel-better": ["beginner", "به بهتر شدن فاصله‌ها، نوشته‌ها، دکمه‌ها و جزئیات ظاهری رابط کمک می‌کند."],
+  "motion-patterns": ["advanced", "الگوهای حرکت و انیمیشن برای اجزایی مانند دکمه، پنجره و تغییر صفحه ارائه می‌کند."],
+  seo: ["beginner", "برای بررسی و بهبود دیده‌شدن سایت در موتورهای جست‌وجو راهنما می‌دهد."],
+  "code-review": ["advanced", "تغییرات کد یا درخواست ادغام را برای یافتن ایراد بررسی می‌کند."],
+  "feature-dev": ["advanced", "ساخت یک قابلیت جدید را با توجه به ساختار پروژه مرحله‌بندی می‌کند."],
+  plan: ["beginner", "خواسته و خطرها را مرور می‌کند و پیش از تغییر کد یک برنامه پیشنهاد می‌دهد."],
+  "quality-gate": ["advanced", "قواعد قالب‌بندی و کیفیت یک فایل را بررسی و موارد اصلاح را گزارش می‌کند."],
+  "update-docs": ["advanced", "مستندات را با فایل‌ها و اجزای اصلی پروژه هماهنگ می‌کند."],
+  "a11y-architect": ["advanced", "یک دستیار تخصصی برای بررسی دسترس‌پذیری رابط و استانداردهای مرتبط است."],
+  architect: ["advanced", "یک دستیار تخصصی برای طراحی ساختار سیستم و تصمیم‌های فنی است."],
+  "code-reviewer": ["advanced", "یک دستیار تخصصی برای بررسی کیفیت، امنیت و نگهداری کد است."],
+  "seo-specialist": ["advanced", "یک دستیار تخصصی برای بررسی فنی و محتوایی بهینه‌سازی جست‌وجو است."],
+};
+const favoriteKey = "studio-library-favorites-v1";
+function readLibraryFavorites() { try { const value=JSON.parse(localStorage.getItem(favoriteKey)||"[]"); return new Set(Array.isArray(value) ? value.filter(x=>typeof x==="string") : []); } catch {return new Set();} }
+let libraryFavorites = readLibraryFavorites();
 function renderLibrary() {
   $("#libraryPaywall").hidden = !state.services.some(s => s.sample);
   const list = LIB()[state.libKind] || [];
@@ -385,11 +440,14 @@ function renderLibrary() {
   const mine = state.libOnlyMine ? myNames(state.libKind) : null;
   const filtered = list.filter((x) => {
     if (mine && !mine.has(x.name)) return false;
+    if (state.libFavorites && !libraryFavorites.has(`${state.libKind}:${x.name}`)) return false;
+    if (state.libLevel !== "all" && (LIB_REVIEW[x.name]?.[0] || "unknown") !== state.libLevel) return false;
     const paths = state.services.filter(s => (s[state.libKind] || []).includes(x.name));
     if (state.libCategory === "other" && paths.length) return false;
     if (state.libCategory !== "all" && state.libCategory !== "other" && !paths.some(s => s.id === state.libCategory)) return false;
     if (!q) return true;
-    return normalize(x.name).includes(q) || normalize(x.desc).includes(q) || normalize(paths.map(p => p.title).join(" ")).includes(q);
+    const haystack = normalize([x.name, x.desc, LIB_REVIEW[x.name]?.[1], ...paths.map(p => p.title)].join(" "));
+    return q.trim().split(/\s+/).every(term => haystack.includes(term));
   });
   const slice = filtered.slice(0, state.libLimit);
 
@@ -400,6 +458,8 @@ function renderLibrary() {
       <button class="lib__name" type="button" data-copy-text="${esc(state.libKind === "commands" ? "/" + x.name : x.name)}" title="کپی نام">
         <span class="mark" aria-hidden="true">${state.libKind === "commands" ? "/" : state.libKind === "agents" ? "@" : "◇"}</span>${esc(toolLabel(x.name))}
       </button>
+      <button type="button" class="library-favorite" data-favorite="${esc(x.name)}" aria-pressed="${libraryFavorites.has(`${state.libKind}:${x.name}`)}">${libraryFavorites.has(`${state.libKind}:${x.name}`) ? "★ حذف از علاقه‌مندی" : "☆ افزودن به علاقه‌مندی"}</button>
+      <p class="lib__desc">${esc(LIB_REVIEW[x.name]?.[1] || (state.libKind === "skills" ? "یک راهنمای تخصصی برای انجام این نوع کار است؛ توضیح دقیق آن هنوز به فارسی بررسی نشده است." : state.libKind === "commands" ? "دستوری آماده برای انجام یک کار مشخص است؛ توضیح دقیق فارسی هنوز بررسی نشده است." : "یک دستیار تخصصی برای انجام وظیفه‌ای مشخص است؛ توضیح دقیق فارسی هنوز بررسی نشده است."))} <small>سطح: ${{beginner:"شروع",advanced:"پیشرفته"}[LIB_REVIEW[x.name]?.[0]] || "ارزیابی‌نشده"}</small></p>
       <p class="lib__desc">${(() => { const paths = state.services.filter(s => (s[state.libKind] || []).includes(x.name)); return paths.length ? `پیشنهاد شده برای: ${paths.map(p => `<a href="#/s/${esc(p.id)}">${esc(p.title)}</a>`).join("، ")}` : "هنوز به مسیری در این برنامه اضافه نشده است."; })()}</p>
       <details class="original-desc"><summary>توضیح اصلی به زبان انگلیسی</summary><p dir="ltr">${esc(cleanSource(x.desc || "—"))}</p></details>
     </li>`
@@ -425,7 +485,7 @@ window.addEventListener("studio:catalog", async (event) => {
   state.services = payload?.playbooks?.services || sampleCatalog.services;
   buildIndexes(); paintStaticBindings();
   palCache = null; paletteView = []; paletteList.replaceChildren(); if (!palette.hidden) closePalette();
-  renderPopular(); renderHomeTopics(); renderLibraryTopics(); renderTagFilter(); renderServices(); renderLibrary();
+  renderPopular(); renderHomeTopics(); renderLibraryTopics(); renderTagFilter(); renderServices(); renderLibrary(); renderProjectSuggestion();
   await router();
 });
 
@@ -502,6 +562,7 @@ function parseRoute() {
   if (seg[0] === "subscribe") return { view: "subscribe" };
   if (seg[0] === "admin") return { view: "admin" };
   if (seg[0] === "workspace") return { view: "workspace" };
+  if (seg[0] === "projects") return { view: "projects" };
   if (seg[0] === "s" && seg[1]) return { view: "playbook", id: seg[1], anchor: seg[2] };
   return { view: "home" };
 }
@@ -521,6 +582,7 @@ async function router() {
     else a.removeAttribute("aria-current");
   });
 
+  if (r.view === "projects") { renderProjectSuggestion(); window.dispatchEvent(new Event("studio:projects-open")); }
   if (r.view === "home") renderJourney();
   if (r.view === "services") renderServices();
   if (r.view === "library") renderLibrary();
@@ -582,6 +644,15 @@ $("#serviceSearch")?.addEventListener("input", (e) => { state.serviceQuery = e.t
 
 $("#libCategory")?.addEventListener("change", (e) => selectLibraryTopic(e.target.value));
 $("#libraryTopics")?.addEventListener("click", (e) => { const button = e.target.closest("[data-library-topic]"); if (button) selectLibraryTopic(button.dataset.libraryTopic); });
+$("#libLevel").addEventListener("change", e => { state.libLevel=e.target.value; state.libLimit=60; renderLibrary(); });
+$("#libFavorites").addEventListener("change", e => { state.libFavorites=e.target.checked; state.libLimit=60; renderLibrary(); });
+$("#libList").addEventListener("click", e => {
+  const button=e.target.closest("[data-favorite]"); if (!button) return;
+  const key=`${state.libKind}:${button.dataset.favorite}`;
+  if (libraryFavorites.has(key)) libraryFavorites.delete(key); else libraryFavorites.add(key);
+  try { localStorage.setItem(favoriteKey,JSON.stringify([...libraryFavorites])); } catch { $("#libStatus").textContent="ذخیره علاقه‌مندی در مرورگر ممکن نیست."; return; }
+  renderLibrary();
+});
 $("#libSearch")?.addEventListener("input", (e) => { state.libQuery = e.target.value; state.libLimit = 60; renderLibrary(); });
 $("#libOnlyMine")?.addEventListener("change", (e) => { state.libOnlyMine = e.target.checked; state.libLimit = 60; renderLibrary(); });
 $$(".tab").forEach((tab) =>
@@ -738,6 +809,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
       state.data = window.studioCatalog.catalog; state.services = window.studioCatalog.playbooks.services; state.entitled = true;
       buildIndexes(); paintStaticBindings();
     }
+    renderProjectSuggestion();
     renderPopular();
     renderHomeTopics();
     renderLibraryTopics();

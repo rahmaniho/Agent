@@ -1,0 +1,2 @@
+# Private catalog exports and local backups must stay out of the public repository.
+/catalog/
