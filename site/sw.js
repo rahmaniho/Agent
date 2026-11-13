@@ -1,7 +1,7 @@
 /* sw.js — کش ساده برای کارکرد آفلاین پس از اولین بازدید */
-const CACHE = "ecc-playbook-v1";
+const CACHE = "agent-studio-v3";
 const ASSETS = [
-  "./", "./index.html", "./assets/styles.css", "./assets/app.js",
+  "./", "./index.html", "./assets/styles.css", "./assets/studio.css", "./assets/app.js", "./assets/workspace.js", "./assets/agent.js",
   "./assets/data.json", "./assets/playbooks.json", "./assets/favicon.svg",
   "./assets/og.svg", "./manifest.webmanifest",
 ];
@@ -26,7 +26,7 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  if (url.origin !== location.origin) return;
+  if (url.origin !== location.origin || url.pathname.includes("/api/")) return;
 
   // داده‌ها: شبکه اول، کش پشتیبان
   if (/\/(data|playbooks)\.json$/.test(url.pathname)) {

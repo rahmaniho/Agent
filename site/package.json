@@ -1,0 +1,7 @@
+{
+  "name": "agent-studio-site",
+  "private": true,
+  "scripts": { "build:workspace": "esbuild src/workspace.js --bundle --format=esm --minify --legal-comments=eof --outfile=assets/workspace.js" },
+  "dependencies": { "@supabase/supabase-js": "2.98.0" },
+  "devDependencies": { "esbuild": "0.25.12" }
+}

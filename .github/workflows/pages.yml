@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
           node --check site/assets/app.js
           node --check site/assets/sw.js
-          for f in site/assets/data.json site/assets/playbooks.json site/assets/manifest.webmanifest; do
+          for f in site/assets/data.json site/assets/playbooks.json site/manifest.webmanifest; do
             node -e "JSON.parse(require('fs').readFileSync('$f','utf8')); console.log('valid JSON: $f')"
           done
           test -f site/index.html

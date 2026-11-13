@@ -124,7 +124,7 @@ function paintStaticBindings() {
     if (key === "version") el.textContent = d.version || "2.2.3";
     else if (key in counts) el.textContent = fa(counts[key]);
   });
-  document.title = `ECC Playbook — ${fa(state.services.length)} مسیر خدمت و ${fa(counts["count-prompts"])} پرامپت آماده`;
+  document.title = `Agent Studio — ${fa(state.services.length)} مسیر کاری و ابزارهای ایجنت`;
 }
 
 /* ── کارت‌های خدمت ──────────────────────────────────── */
@@ -354,6 +354,8 @@ function parseRoute() {
   if (seg[0] === "services") return { view: "services" };
   if (seg[0] === "library") return { view: "library" };
   if (seg[0] === "install") return { view: "install" };
+  if (seg[0] === "fcc") return { view: "fcc" };
+  if (seg[0] === "workspace") return { view: "workspace" };
   if (seg[0] === "s" && seg[1]) return { view: "playbook", id: seg[1], anchor: seg[2] };
   return { view: "home" };
 }
@@ -382,7 +384,7 @@ async function router() {
 
   if (r.anchor) {
     const map = { steps: "#h-steps", prompts: "#h-prompts", pitfalls: "#h-pitfalls", toolbox: "#pbToolbox" };
-    const target = $(map[r.anchor] || "");
+    const target = map[r.anchor] ? $(map[r.anchor]) : null;
     if (target) { target.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
   }
   if (!firstRender) window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
