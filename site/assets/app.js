@@ -433,7 +433,7 @@ const LIB_REVIEW = {
 // Premium descriptions travel only with the authorized catalog RPC, never as public assets.
 function libraryReview(item) {
   const local = Object.hasOwn(LIB_REVIEW, item.name) ? LIB_REVIEW[item.name] : null;
-  const level = item.level === "beginner" || item.level === "advanced" ? item.level : local?.[0] || "unknown";
+  const level = item.level === "beginner" || item.level === "advanced" || item.level === "unknown" ? item.level : local?.[0] || "unknown";
   const description = typeof item.description_fa === "string" && item.description_fa.trim() ? item.description_fa : local?.[1];
   return [level, description];
 }
