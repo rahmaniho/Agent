@@ -9,6 +9,30 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const cleanSource = (text) => String(text ?? "").replace(/Everything Claude Code/gi, "the toolkit").replace(/\bECC\b/gi, "کیت ابزار").replace(/https?:\/\/github\.com\/[^\s)]+/gi, "[نشانی منبع]");
 const toolLabel = (name) => String(name).replace(/ecc/gi, "toolkit");
 
+// Local inline line-icons, keyed by existing subject IDs (no remote assets).
+const TOPIC_ICONS = {
+  website: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01M7 13h5M7 16h9"/>',
+  webapp: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M12 13h6M12 16h4"/>',
+  api: '<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01M12 10v4M16 7h2M16 17h2"/>',
+  architecture: '<path d="M12 2 3 7l9 5 9-5-9-5ZM3 12l9 5 9-5M3 17l9 5 9-5"/>',
+  mobile: '<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4M11 19h2"/>',
+  ai: '<path d="M9 4a3 3 0 0 0-3 3v.5A3.5 3.5 0 0 0 5 14a3 3 0 0 0 4 4.5V20M15 4a3 3 0 0 1 3 3v.5A3.5 3.5 0 0 1 19 14a3 3 0 0 1-4 4.5V20M12 3v18M8 10h2M14 14h2"/>',
+  testing: '<path d="M9 3h6M10 3v5L5 17a3 3 0 0 0 2.6 4h8.8A3 3 0 0 0 19 17l-5-9V3M8 15h8M10 17l1.5 1.5L15 15"/>',
+  security: '<path d="M12 2 4 5v6c0 5 3.3 8.5 8 11 4.7-2.5 8-6 8-11V5l-8-3ZM9 12l2 2 4-4"/>',
+  performance: '<path d="M4 18a8 8 0 1 1 16 0M12 14l4-4M7 18h10"/><circle cx="12" cy="14" r="1"/>',
+  seo: '<circle cx="10" cy="10" r="6"/><path d="m15 15 5 5M7 10h6M10 7v6"/>',
+  devops: '<path d="M12 16V3M8 7l4-4 4 4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
+  database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/>',
+  onboarding: '<path d="M4 4h6a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V4Zm16 0h-4a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h4V4Z"/>',
+  data: '<path d="M4 20V4M4 20h16M8 16v-4M12 16V7M16 16v-6M20 16V5"/>',
+  harness: '<path d="m14 6 4-4 4 4-4 4-4-4ZM3 21l9-9M5 14l5 5M9 4l2 2M4 9l2 2M19 14v4M17 16h4"/>',
+  all: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  other: '<path d="M4 6h16v13H4zM4 10h16M8 15h.01M12 15h.01M16 15h.01"/>'
+};
+function topicIcon(id) {
+  return `<svg class="topic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${Object.hasOwn(TOPIC_ICONS, id) ? TOPIC_ICONS[id] : TOPIC_ICONS.other}</svg>`;
+}
+
 /* ── وضعیت ─────────────────────────────────────────── */
 const state = {
   data: { skills: [], commands: [], agents: [], version: "2.2.3" },
@@ -174,7 +198,7 @@ function renderJourney() {
   if (!items.length) { host.innerHTML = `<div class="journey-empty"><span>✧</span><div><strong>هنوز مسیری ذخیره نشده</strong><p>یک مسیر را باز کنید، ذخیره کنید و مراحل انجام‌شده را علامت بزنید.</p></div><a href="#/services">انتخاب مسیر ←</a></div>`; return; }
   host.innerHTML = items.map((s) => {
     const p = progressFor(s.id), total = s.steps?.length || 0, done = new Set(p.steps.filter((i) => i < total)).size;
-    return `<a href="#/s/${esc(s.id)}" class="journey-item"><span class="journey-icon">${esc(s.icon || "◆")}</span><span class="journey-item-body"><strong>${esc(s.title)} ${p.favorite ? "★" : ""}</strong><small>${fa(done)} از ${fa(total)} مرحله انجام شده</small><span class="journey-track"><i style="width:${total ? Math.round(done / total * 100) : 0}%"></i></span></span><span aria-hidden="true">←</span></a>`;
+    return `<a href="#/s/${esc(s.id)}" class="journey-item"><span class="journey-icon">${topicIcon(s.id)}</span><span class="journey-item-body"><strong>${esc(s.title)} ${p.favorite ? "★" : ""}</strong><small>${fa(done)} از ${fa(total)} مرحله انجام شده</small><span class="journey-track"><i style="width:${total ? Math.round(done / total * 100) : 0}%"></i></span></span><span aria-hidden="true">←</span></a>`;
   }).join("");
 }
 function paintProgress(s) {
@@ -190,7 +214,7 @@ function cardHtml(s, compact = false) {
   <li class="card${compact ? " card--compact" : ""}" data-id="${esc(s.id)}">
     <a class="card__hit" href="#/s/${esc(s.id)}" aria-label="${esc(s.title)} — دیدن مسیر">
       <div class="card__top">
-        <span class="card__icon" aria-hidden="true">${esc(s.icon || "◆")}</span>
+        <span class="card__icon" aria-hidden="true">${topicIcon(s.id)}</span>
         <div class="card__head">
           <h3 class="card__title">${esc(s.title)}</h3>
           <p class="card__tagline">${esc(s.tagline || "")}</p>
@@ -203,6 +227,24 @@ function cardHtml(s, compact = false) {
       </div>
     </a>
   </li>`;
+}
+
+function renderHomeTopics() {
+  $("#homeTopics").innerHTML = state.services.map(s => `<li><a href="#/s/${esc(s.id)}" class="topic-card"><span class="topic-card-icon">${topicIcon(s.id)}</span><span>${esc(s.title)}</span><b aria-hidden="true">←</b></a></li>`).join("");
+}
+function renderLibraryTopics() {
+  if (state.libCategory !== "all" && state.libCategory !== "other" && !state.services.some(s => s.id === state.libCategory)) state.libCategory = "all";
+  const topics = [{id:"all",title:"همه موضوع‌ها"}, ...state.services, {id:"other",title:"سایر ابزارها"}];
+  const select = $("#libCategory");
+  select.innerHTML = topics.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join("");
+  select.value = state.libCategory;
+  $("#libraryTopics").innerHTML = topics.map(s => `<button type="button" class="topic-filter${s.id === state.libCategory ? " is-active" : ""}" data-library-topic="${esc(s.id)}" aria-pressed="${s.id === state.libCategory}"><span class="topic-filter-icon">${topicIcon(s.id)}</span><span>${esc(s.title)}</span></button>`).join("");
+}
+function selectLibraryTopic(id) {
+  if (!Array.from($("#libCategory").options).some(option => option.value === id)) return;
+  state.libCategory = id; state.libLimit = 60; $("#libCategory").value = id;
+  $$("[data-library-topic]").forEach(button => { const selected = button.dataset.libraryTopic === id; button.classList.toggle("is-active", selected); button.setAttribute("aria-pressed", String(selected)); });
+  renderLibrary();
 }
 
 function renderPopular() {
@@ -253,7 +295,7 @@ function renderPlaybook(id) {
   $("#pbPaywall").hidden = !s.sample;
   $("#openBuilder").href = `#/builder/${encodeURIComponent(s.id)}`;
   $("#pbCrumb").textContent = s.title;
-  $("#pbIcon").textContent = s.icon || "◆";
+  $("#pbIcon").innerHTML = topicIcon(s.id);
   $("#pbTitle").textContent = s.title;
   $("#pbTagline").textContent = s.tagline || "";
   $("#pbSummary").textContent = s.summary || "";
@@ -322,7 +364,7 @@ function renderPlaybook(id) {
     .filter((x) => x.id !== s.id && (x.tags || []).some((t) => (s.tags || []).includes(t)))
     .slice(0, 4);
   $("#pbRelated").innerHTML = related.length
-    ? related.map((r) => `<li><a href="#/s/${esc(r.id)}"><span aria-hidden="true">${esc(r.icon || "◆")}</span> ${esc(r.title)}</a></li>`).join("")
+    ? related.map((r) => `<li><a href="#/s/${esc(r.id)}"><span aria-hidden="true">${topicIcon(r.id)}</span> ${esc(r.title)}</a></li>`).join("")
     : `<li class="muted">—</li>`;
 }
 
@@ -383,7 +425,7 @@ window.addEventListener("studio:catalog", async (event) => {
   state.services = payload?.playbooks?.services || sampleCatalog.services;
   buildIndexes(); paintStaticBindings();
   palCache = null; paletteView = []; paletteList.replaceChildren(); if (!palette.hidden) closePalette();
-  renderPopular(); renderTagFilter(); renderServices(); renderLibrary();
+  renderPopular(); renderHomeTopics(); renderLibraryTopics(); renderTagFilter(); renderServices(); renderLibrary();
   await router();
 });
 
@@ -538,7 +580,8 @@ document.addEventListener("click", (e) => {
 
 $("#serviceSearch")?.addEventListener("input", (e) => { state.serviceQuery = e.target.value; renderServices(); });
 
-$("#libCategory")?.addEventListener("change", (e) => { state.libCategory = e.target.value; state.libLimit = 60; renderLibrary(); });
+$("#libCategory")?.addEventListener("change", (e) => selectLibraryTopic(e.target.value));
+$("#libraryTopics")?.addEventListener("click", (e) => { const button = e.target.closest("[data-library-topic]"); if (button) selectLibraryTopic(button.dataset.libraryTopic); });
 $("#libSearch")?.addEventListener("input", (e) => { state.libQuery = e.target.value; state.libLimit = 60; renderLibrary(); });
 $("#libOnlyMine")?.addEventListener("change", (e) => { state.libOnlyMine = e.target.checked; state.libLimit = 60; renderLibrary(); });
 $$(".tab").forEach((tab) =>
@@ -691,12 +734,13 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 (async () => {
   try {
     await ready;
-    $("#libCategory").insertAdjacentHTML("beforeend", state.services.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join(""));
     if (window.studioCatalog?.catalog && window.studioCatalog?.playbooks?.services) {
       state.data = window.studioCatalog.catalog; state.services = window.studioCatalog.playbooks.services; state.entitled = true;
       buildIndexes(); paintStaticBindings();
     }
     renderPopular();
+    renderHomeTopics();
+    renderLibraryTopics();
     renderTagFilter();
     renderServices();
     router();

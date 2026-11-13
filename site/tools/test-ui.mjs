@@ -465,3 +465,61 @@ test('Google callback failure is shown without reporting a successful sign-in', 
   try { assert.equal($('#loginGate').hidden,false); assert.match($('#authStatus').textContent,/تکمیل نشد/); assert.equal(w.sessionStorage.getItem('studio-google-return'),null); assert.equal($('#purchaseFields').disabled,true); await delay(30); }
   finally {dom.window.close();}
 });
+
+test('each existing subject has an icon and library filters follow the selected topic', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data}); w.eval(app);
+  try {
+    await waitFor(()=>$('#homeTopics').children.length===playbooks.services.length);
+    for (const subject of playbooks.services) {
+      const link=$(`#homeTopics a[href="#/s/${subject.id}"]`);
+      assert.ok(link && link.querySelector('svg'),subject.id);
+      assert.ok($(`#libraryTopics [data-library-topic="${subject.id}"] svg`),subject.id);
+    }
+    w.location.hash='#/library'; await waitFor(()=>!$('[data-view=library]').hidden);
+    const topic=$('#libraryTopics [data-library-topic="website"]'); topic.click();
+    assert.equal(topic.getAttribute('aria-pressed'),'true'); assert.equal($('#libCategory').value,'website');
+    const shown=[...$('#libList').querySelectorAll('[data-copy-text]')].map(x=>x.dataset.copyText).sort();
+    assert.deepEqual(shown,playbooks.services.find(s=>s.id==='website').skills.slice().sort());
+    $('[data-lib="commands"]').click();
+    assert.deepEqual([...$('#libList').querySelectorAll('[data-copy-text]')].map(x=>x.dataset.copyText).sort(),playbooks.services.find(s=>s.id==='website').commands.map(x=>'/'+x).sort());
+    $('#libCategory').value='other'; $('#libCategory').dispatchEvent(new w.Event('change'));
+    assert.equal($('#libraryTopics [data-library-topic="other"]').getAttribute('aria-pressed'),'true');
+    $('#libraryTopics [data-library-topic="all"]').click(); assert.equal($('#libCategory').value,'all');
+    w.location.hash='#/s/security'; await waitFor(()=>$('#pbTitle').textContent===playbooks.services.find(s=>s.id==='security').title);
+    assert.ok($('#pbIcon svg')); assert.ok($('#pbRelated svg'));
+  } finally {dom.window.close();}
+});
+
+test('account creation remains an explicit action using the existing signup method', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[];
+  w.__client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:null}}),signUp:async args=>{calls.push(args);return {data:{session:null},error:null};}},rpc:async()=>({data:[]}),from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    $('#headerLogin').click(); assert.equal($('#signUp').type,'button'); assert.ok($('#signUp').classList.contains('neural-signup'));
+    $('#authEmail').value='person@example.test'; $('#authPassword').value='test-password'; $('#signUp').click();
+    await waitFor(()=>calls.length===1 && $('#authStatus').textContent.includes('ایمیل خود را بررسی کنید'));
+    assert.equal(calls[0].email,'person@example.test'); assert.equal(calls[0].options.emailRedirectTo,'http://127.0.0.1:4173/');
+    assert.equal($('#loginGate').hidden,false); assert.equal($('#purchaseFields').disabled,true); assert.equal($('#authPassword').value,'');
+  } finally {dom.window.close();}
+});
+
+test('subject filters keep their selection when access changes and never retain premium items after sign-out', async () => {
+  const fullData=JSON.parse(await readFile(new URL('../catalog/data.json',site),'utf8'));
+  const fullPlaybooks=JSON.parse(await readFile(new URL('../catalog/playbooks.json',site),'utf8'));
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});w.eval(app);
+  try {
+    await waitFor(()=>$('#libraryTopics [data-library-topic="website"]'));
+    w.location.hash='#/library'; await waitFor(()=>!$('[data-view=library]').hidden);
+    $('#libraryTopics [data-library-topic="website"]').click();
+    w.dispatchEvent(new w.CustomEvent('studio:catalog',{detail:{catalog:fullData,playbooks:fullPlaybooks}}));
+    await waitFor(()=>$('#libraryPaywall').hidden);
+    assert.equal($('#libCategory').value,'website'); assert.equal($('#libraryTopics [data-library-topic="website"]').getAttribute('aria-pressed'),'true');
+    assert.deepEqual([...$('#libList').querySelectorAll('[data-copy-text]')].map(x=>x.dataset.copyText).sort(),fullPlaybooks.services.find(s=>s.id==='website').skills.slice().sort());
+    w.dispatchEvent(new w.CustomEvent('studio:catalog',{detail:null}));
+    await waitFor(()=>!$('#libraryPaywall').hidden);
+    assert.equal($('#libCategory').value,'website');
+    assert.deepEqual([...$('#libList').querySelectorAll('[data-copy-text]')].map(x=>x.dataset.copyText).sort(),playbooks.services.find(s=>s.id==='website').skills.slice().sort());
+  } finally {dom.window.close();}
+});
