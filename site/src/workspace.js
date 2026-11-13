@@ -73,6 +73,8 @@ if (window.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches && !windo
   gate.addEventListener('pointerleave', () => { for (const key of ['--sphere-x','--sphere-y','--card-x','--card-y','--glow-x','--glow-y']) gate.style.removeProperty(key); });
 }
 let accountGeneration = 0, adminRows = [], expiryTimer, projectGeneration = 0, adminPurchaseGeneration = 0, adminPurchaseOffset = 0, catalogEditorAdmin = false, catalogReviewBusy = false;
+const catalogDrafts = new Map();
+let catalogSelection = null, catalogSave = null;
 function publishCatalog(payload) {
   window.studioCatalog = payload;
   window.dispatchEvent(new CustomEvent('studio:catalog', {detail: payload}));
@@ -252,66 +254,101 @@ function drawAdmin() {
 }
 function catalogReviewControls(busy) {
   catalogReviewBusy=busy;
-  for (const id of ['catalogReviewKind','catalogReviewSearch','catalogReviewMissing','catalogReviewItem','catalogReviewDescription','catalogReviewLevel']) $(`#${id}`).disabled=busy;
-  $('#catalogReviewSave').disabled=busy || !currentReviewItem();
+  for (const id of ['catalogReviewKind','catalogReviewSearch','catalogReviewMissing','catalogReviewItem','catalogReviewDescription','catalogReviewLevel','catalogReviewUseLatest','catalogReviewRebase','catalogReviewRefresh']) $(`#${id}`).disabled=busy;
+  const item=currentReviewItem(), draft=item && catalogDrafts.get(reviewKey($('#catalogReviewKind').value,item.name));
+  $('#catalogReviewSave').disabled=busy || !item || !!(draft && reviewConflict(draft,item));
+}
+function reviewKey(kind,name) { return JSON.stringify([kind,name]); }
+function reviewConflict(draft,item) {
+  return draft.conflict || draft.previous_description !== (item.description_fa ?? null) || draft.previous_level !== (item.level ?? null);
 }
 function clearCatalogEditor() {
-  catalogEditorAdmin=false; catalogReviewControls(false); $('#catalogReviewItem').replaceChildren(); $('#catalogReviewDescription').value=''; $('#catalogReviewOriginal').textContent='';
-  $('#catalogReviewSummary').textContent=''; $('#catalogReviewStatus').textContent=''; $('#catalogReviewSave').disabled=true;
+  catalogEditorAdmin=false; catalogReviewControls(!!catalogSave); $('#catalogReviewItem').replaceChildren(); $('#catalogReviewDescription').value=''; $('#catalogReviewOriginal').textContent='';
+  $('#catalogReviewSummary').textContent=''; $('#catalogReviewStatus').textContent=''; $('#catalogReviewDraftNotice').textContent=''; $('#catalogReviewConflict').hidden=true; $('#catalogReviewLatest').textContent=''; $('#catalogReviewSave').disabled=true;
 }
 function currentReviewItem() {
   if (!catalogEditorAdmin) return null;
   const kind=$('#catalogReviewKind').value, name=$('#catalogReviewItem').value;
   return window.studioCatalog?.catalog?.[kind]?.find(item => item.name===name) || null;
 }
+function rememberCatalogDraft(force=false) {
+  const item=currentReviewItem(); if (!item) return;
+  const kind=$('#catalogReviewKind').value, key=reviewKey(kind,item.name), prior=catalogDrafts.get(key);
+  const description=$('#catalogReviewDescription').value, level=$('#catalogReviewLevel').value;
+  if (!force && !prior && description === (item.description_fa || '') && level === (['beginner','advanced','unknown'].includes(item.level) ? item.level : 'unknown')) return;
+  catalogDrafts.set(key,{description,level,previous_description:prior ? prior.previous_description : item.description_fa ?? null,previous_level:prior ? prior.previous_level : item.level ?? null,conflict:prior?.conflict || false});
+  const option=$('#catalogReviewItem').selectedOptions[0]; if (option) option.textContent=`${item.name} ✎`;
+  $('#catalogReviewDraftNotice').textContent='پیش‌نویس فقط در حافظهٔ همین صفحه است و با خروج، بازخوانی یا بستن صفحه از بین می‌رود؛ هنوز ذخیره نشده است.';
+}
 function showCatalogReviewItem() {
-  const item=currentReviewItem();
-  $('#catalogReviewDescription').value=item?.description_fa || '';
-  $('#catalogReviewLevel').value=['beginner','advanced','unknown'].includes(item?.level) ? item.level : 'unknown';
+  const item=currentReviewItem(), kind=$('#catalogReviewKind').value;
+  catalogSelection=item ? {kind,name:item.name} : null;
+  const draft=item && catalogDrafts.get(reviewKey(kind,item.name));
+  $('#catalogReviewDescription').value=draft ? draft.description : item?.description_fa || '';
+  $('#catalogReviewLevel').value=draft ? draft.level : ['beginner','advanced','unknown'].includes(item?.level) ? item.level : 'unknown';
   $('#catalogReviewOriginal').textContent=item?.desc || '';
-  $('#catalogReviewSave').disabled=catalogReviewBusy || !item;
+  const option=$('#catalogReviewItem').selectedOptions[0]; if (option) option.textContent=`${item.name} ${draft ? '✎' : item.description_fa ? '✓' : '—'}`;
+  const conflict=!!(draft && reviewConflict(draft,item));
+  $('#catalogReviewConflict').hidden=!conflict;
+  $('#catalogReviewLatest').textContent=conflict ? `نسخهٔ ذخیره‌شده: ${item.description_fa || 'بدون توضیح'} | سطح: ${{beginner:'شروع',advanced:'پیشرفته',unknown:'ارزیابی‌نشده'}[item.level] || 'ارزیابی‌نشده'}` : '';
+  $('#catalogReviewDraftNotice').textContent=draft ? 'پیش‌نویس فقط در حافظهٔ همین صفحه است و با خروج، بازخوانی یا بستن صفحه از بین می‌رود؛ هنوز ذخیره نشده است.' : '';
+  catalogReviewControls(catalogReviewBusy);
 }
 function renderCatalogEditor(preferredName) {
-  const select=$('#catalogReviewItem'), prior=preferredName || select.value, kind=$('#catalogReviewKind').value;
+  const select=$('#catalogReviewItem'), kind=$('#catalogReviewKind').value, prior=preferredName || (catalogSelection?.kind===kind ? catalogSelection.name : select.value);
   select.replaceChildren();
   if (!catalogEditorAdmin || !Array.isArray(window.studioCatalog?.catalog?.[kind])) { $('#catalogReviewSummary').textContent='کاتالوگ محافظت‌شده در دسترس نیست.'; showCatalogReviewItem(); return; }
   const items=window.studioCatalog.catalog[kind], missing=$('#catalogReviewMissing').checked;
   const q=$('#catalogReviewSearch').value.trim().toLocaleLowerCase();
-  const filtered=items.filter(item=>typeof item?.name==='string' && (!missing || !String(item.description_fa || '').trim()) && (!q || `${item.name} ${item.desc || ''} ${item.description_fa || ''}`.toLocaleLowerCase().includes(q)));
-  for (const item of filtered) { const option=document.createElement('option'); option.value=item.name; option.textContent=`${item.name} ${item.description_fa ? '✓' : '—'}`; select.append(option); }
+  const filtered=items.filter(item=>typeof item?.name==='string' && (!missing || !String(item.description_fa || '').trim() || catalogDrafts.has(reviewKey(kind,item.name))) && (!q || `${item.name} ${item.desc || ''} ${item.description_fa || ''}`.toLocaleLowerCase().includes(q)));
+  for (const item of filtered) { const option=document.createElement('option'); option.value=item.name; option.textContent=`${item.name} ${catalogDrafts.has(reviewKey(kind,item.name)) ? '✎' : item.description_fa ? '✓' : '—'}`; select.append(option); }
   if(filtered.some(item=>item.name===prior)) select.value=prior; else select.selectedIndex=filtered.length ? 0 : -1;
   const unreviewed=items.filter(item=>!String(item.description_fa || '').trim()).length;
-  $('#catalogReviewSummary').textContent=`${faNumber(filtered.length)} مورد در فهرست؛ ${faNumber(unreviewed)} مورد بدون توضیح فارسی ذخیره‌شده در کاتالوگ.`;
+  $('#catalogReviewSummary').textContent=`${faNumber(filtered.length)} مورد در فهرست؛ ${faNumber(unreviewed)} مورد بدون توضیح فارسی ذخیره‌شده در کاتالوگ؛ ${faNumber(catalogDrafts.size)} پیش‌نویس در این صفحه.`;
   showCatalogReviewItem();
 }
+$('#catalogReviewRefresh').addEventListener('click',()=>{ if (!catalogReviewBusy && user) refreshAccount(); });
 $('#catalogReviewKind').addEventListener('change',()=>renderCatalogEditor());
 $('#catalogReviewSearch').addEventListener('input',()=>renderCatalogEditor());
 $('#catalogReviewMissing').addEventListener('change',()=>renderCatalogEditor());
 $('#catalogReviewItem').addEventListener('change',showCatalogReviewItem);
+$('#catalogReviewDescription').addEventListener('input',()=>rememberCatalogDraft());
+$('#catalogReviewLevel').addEventListener('change',()=>rememberCatalogDraft());
+$('#catalogReviewUseLatest').addEventListener('click',()=>{ const item=currentReviewItem(); if (!item || catalogReviewBusy) return; catalogDrafts.delete(reviewKey($('#catalogReviewKind').value,item.name)); showCatalogReviewItem(); $('#catalogReviewStatus').textContent='پیش‌نویس کنار گذاشته شد.'; });
+$('#catalogReviewRebase').addEventListener('click',()=>{ const item=currentReviewItem(); if (!item || catalogReviewBusy) return; const draft=catalogDrafts.get(reviewKey($('#catalogReviewKind').value,item.name)); if (!draft) return; draft.previous_description=item.description_fa ?? null; draft.previous_level=item.level ?? null; draft.conflict=false; showCatalogReviewItem(); $('#catalogReviewStatus').textContent='پیش‌نویس حفظ شد؛ پیش از ذخیره، نسخهٔ تازه را بررسی کنید.'; });
 $('#catalogReviewForm').addEventListener('submit',async event=>{
   event.preventDefault();
   if (catalogReviewBusy) return;
   const item=currentReviewItem(), who=user?.id, generation=accountGeneration;
   const description=$('#catalogReviewDescription').value.trim(), level=$('#catalogReviewLevel').value, kind=$('#catalogReviewKind').value;
   if(!item || !who || !catalogEditorAdmin || !description) { $('#catalogReviewStatus').textContent='یک ابزار و توضیح فارسی معتبر انتخاب کنید.'; return; }
-  catalogReviewControls(true); $('#catalogReviewStatus').textContent='در حال ذخیره بازبینی...';
+  rememberCatalogDraft(true);
+  const key=reviewKey(kind,item.name), draft=catalogDrafts.get(key);
+  if(draft && reviewConflict(draft,item)) { showCatalogReviewItem(); $('#catalogReviewStatus').textContent='ابتدا دربارهٔ نسخهٔ تازه تصمیم بگیرید.'; return; }
+  const token={who}; catalogSave=token; catalogReviewControls(true); $('#catalogReviewStatus').textContent='در حال ذخیره بازبینی...';
+  let refreshAfter=false;
   try {
-    const result=await supabase.rpc('studio_admin_update_catalog_review',{kind,item_name:item.name,description,level,previous_description:item.description_fa ?? null,previous_level:item.level ?? null});
-    if(generation!==accountGeneration || user?.id!==who) return;
+    const result=await supabase.rpc('studio_admin_update_catalog_review',{kind,item_name:item.name,description,level,previous_description:draft ? draft.previous_description : item.description_fa ?? null,previous_level:draft ? draft.previous_level : item.level ?? null});
+    if(catalogSave!==token || user?.id!==who) return;
     if(result.error) {
       if(result.error.code==='40001') {
+        if(draft) draft.conflict=true;
+        if(generation!==accountGeneration) { refreshAfter=true; return; }
         const fresh=await supabase.rpc('studio_premium_catalog');
-        if(generation!==accountGeneration || user?.id!==who) return;
-        if(!fresh.error && fresh.data?.[0]?.catalog && fresh.data[0].playbooks?.services) { publishCatalog(fresh.data[0]); renderCatalogEditor(item.name); $('#catalogReviewStatus').textContent='این ابزار هم‌زمان تغییر کرده است؛ نسخهٔ تازه بارگذاری شد. تغییرات خود را دوباره وارد کنید.'; }
-        else $('#catalogReviewStatus').textContent='این ابزار تغییر کرده و دریافت نسخهٔ تازه ممکن نشد؛ صفحه را بازخوانی کنید.';
-      } else report($('#catalogReviewStatus'),result.error);
+        if(catalogSave!==token || user?.id!==who) return;
+        if(generation!==accountGeneration) { refreshAfter=true; return; }
+        if(!fresh.error && fresh.data?.[0]?.catalog && fresh.data[0].playbooks?.services) { publishCatalog(fresh.data[0]); renderCatalogEditor(item.name); $('#catalogReviewStatus').textContent='این ابزار هم‌زمان تغییر کرده است؛ پیش‌نویس شما حفظ شد. نسخهٔ تازه را بررسی کنید.'; }
+        else $('#catalogReviewStatus').textContent='این ابزار تغییر کرده و دریافت نسخهٔ تازه ممکن نشد؛ با دکمهٔ دریافت دوباره تلاش کنید. پیش‌نویس را پیش از بازخوانی صفحه کپی کنید.';
+      } else if(generation===accountGeneration) report($('#catalogReviewStatus'),result.error);
       return;
     }
+    catalogDrafts.delete(key);
+    if(generation!==accountGeneration) { refreshAfter=true; return; }
     const payload=window.studioCatalog, updated=payload.catalog[kind].map(entry=>entry.name===item.name?{...entry,description_fa:description,level}:entry);
     publishCatalog({...payload,catalog:{...payload.catalog,[kind]:updated}});
     renderCatalogEditor(item.name); $('#catalogReviewStatus').textContent='توضیح و سطح ذخیره شد؛ برای محافظت از تغییرات، پشتیبان خصوصی تازه تهیه کنید.';
-  } catch { if(generation===accountGeneration && user?.id===who) $('#catalogReviewStatus').textContent='ذخیره ممکن نشد؛ اتصال را بررسی کنید.'; }
-  finally { if(generation===accountGeneration) catalogReviewControls(false); }
+  } catch { if(catalogSave===token && generation===accountGeneration && user?.id===who) $('#catalogReviewStatus').textContent='ذخیره ممکن نشد؛ اتصال را بررسی کنید.'; }
+  finally { if(catalogSave===token) { catalogSave=null; catalogReviewControls(false); if(refreshAfter && user?.id===who) refreshAccount(); } }
 });
 $('#adminSearch').addEventListener('input', drawAdmin);
 $('#adminPurchaseFilter').addEventListener('change', () => { adminPurchaseOffset=0; if (!$('#adminContent').hidden) loadAdminPurchases(accountGeneration); });
@@ -345,7 +382,7 @@ async function refreshAccount() {
       }
     }
   } else resetPremium();
-  if (!account.is_admin) { $('#adminStatus').textContent = 'این بخش فقط برای مدیر است. اگر مدیر هنوز تعیین نشده، دسترسی فعال نیست.'; return; }
+  if (!account.is_admin) { catalogDrafts.clear(); catalogSelection=null; $('#adminStatus').textContent = 'این بخش فقط برای مدیر است. اگر مدیر هنوز تعیین نشده، دسترسی فعال نیست.'; return; }
   $('#adminStatus').textContent = 'در حال دریافت حساب‌ها...';
   const result = await supabase.rpc('studio_admin_users');
   if (generation !== accountGeneration) return;
@@ -484,7 +521,7 @@ window.addEventListener('studio:projects-open',loadProjects);
 function updateSession(session) {
   const previous = user?.id;
   user = session?.user || null;
-  if (previous !== user?.id) { ++accountGeneration; adminPurchaseOffset=0; clearCatalogEditor(); $('#adminContent').hidden=true; adminRows=[]; $('#adminUsers').replaceChildren(); $('#adminPurchases').replaceChildren(); resetPremium(); }
+  if (previous !== user?.id) { ++accountGeneration; adminPurchaseOffset=0; catalogDrafts.clear(); catalogSelection=null; catalogSave=null; clearCatalogEditor(); $('#adminContent').hidden=true; adminRows=[]; $('#adminUsers').replaceChildren(); $('#adminPurchases').replaceChildren(); resetPremium(); }
   $('#purchaseFields').disabled = !user; $('#purchaseLogin').hidden = !!user;
   $('#projectLoginNotice').hidden = !!user; $('#projectCreate').disabled = !user; $('#projectRefresh').disabled = !user;
   if (previous && previous !== user?.id) { $('#projectTitle').value=''; $('#projectDescription').value=''; }
@@ -585,7 +622,7 @@ $('#resetForm').addEventListener('submit', async event => {
   } catch { authStatus.dataset.kind = 'error'; authStatus.textContent = 'تغییر رمز ممکن نشد؛ دوباره تلاش کنید.'; }
   finally { authBusy = false; setAuthLoading($('#resetSubmit'), false, 'ذخیره رمز جدید'); }
 });
-$('#signOut').addEventListener('click', async () => { intentionalSignOut = true; try { const { error } = await supabase.auth.signOut(); if (error) report(authStatus, error); else { updateSession(null); setGate(false); location.hash = '#/'; $('#sessionNotice').textContent = 'از حساب خارج شدید.'; } } finally { intentionalSignOut = false; } });
+$('#signOut').addEventListener('click', async () => { if (catalogDrafts.size && !window.confirm('پیش‌نویس‌های ذخیره‌نشده با خروج از بین می‌روند. خارج شوید؟')) return; intentionalSignOut = true; try { const { error } = await supabase.auth.signOut(); if (error) report(authStatus, error); else { updateSession(null); setGate(false); location.hash = '#/'; $('#sessionNotice').textContent = 'از حساب خارج شدید.'; } } finally { intentionalSignOut = false; } });
 $('#noteForm').addEventListener('submit', async event => {
   event.preventDefault(); if (!user || saving) return;
   const content = $('#noteContent').value.trim(); if (!content) return;
@@ -598,6 +635,7 @@ $('#noteForm').addEventListener('submit', async event => {
 $('#notesMore').addEventListener('click', () => loadNotes(false));
 $('#notesRefresh').addEventListener('click', () => loadNotes());
 noteControls();
+window.addEventListener('beforeunload', event => { if (user && catalogDrafts.size) { event.preventDefault(); event.returnValue=''; } });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && user) refreshAccount(); });
 refreshAccount();
 let authEventGeneration = 0;
