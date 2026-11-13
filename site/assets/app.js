@@ -16,6 +16,7 @@ const state = {
   libQuery: "",
   libLimit: 60,
   libOnlyMine: false,
+  libCategory: "all",
   current: null,
 };
 
@@ -39,6 +40,26 @@ function buildIndexes() {
   state.data.commands.forEach((s) => commandSet.add(s.name));
   state.data.agents.forEach((s) => agentSet.add(s.name));
 }
+
+
+// پیش‌نیازهای انسانی، مستقل از نام‌های فنی ابزارها.
+const NEEDS = {
+ website: "هدف سایت، مخاطب، متن و تصاویر، نمونه‌های مورد علاقه و در صورت انتشار دامنه و محل میزبانی.",
+ webapp: "ایده و کاربران برنامه، فهرست صفحه‌ها، اطلاعات مورد نیاز، نقش کاربران و محل نگهداری داده‌ها.",
+ api: "فهرست کارهایی که سرویس باید انجام دهد، نوع داده‌ها، کاربران مجاز و محیط اجرا.",
+ architecture: "کد یا توضیح پروژه فعلی، مشکل اصلی، محدودیت‌ها و نتیجه‌ای که انتظار دارید.",
+ mobile: "نوع گوشی‌های هدف، صفحه‌ها و کارهای اصلی، طرح اولیه و شیوه انتشار برنامه.",
+ ai: "مسئله مورد نظر، منابع اطلاعاتی، مدل و ارائه‌دهنده، مجوز ابزارها و محیط امن اجرا.",
+ testing: "کد یا قابلیت آماده، رفتار مورد انتظار، نمونه ورودی و خروجی و محیط آزمون.",
+ security: "شناخت داده‌های حساس، نقش کاربران، روش ورود و نقاطی که باید بررسی شوند.",
+ performance: "صفحه یا سرویس کند، شرایط تکرار مشکل و راهی برای اندازه‌گیری سرعت پیش و پس از تغییر.",
+ seo: "موضوع و مخاطب محتوا، کلمات مورد جست‌وجو، نشانی صفحه‌ها و هدف کسب‌وکار.",
+ devops: "کد آماده، محیط اجرا، محل انتشار، تنظیمات محرمانه و روش بازگشت در صورت خطا.",
+ database: "نوع اطلاعات، رابطه میان آن‌ها، پایگاه داده فعلی، نسخه پشتیبان و برنامه انتقال.",
+ onboarding: "دسترسی به کد یا مستندات، مخاطب راهنما و کارهایی که فرد تازه‌وارد باید یاد بگیرد.",
+ data: "داده‌های قابل استفاده، پرسش اصلی، معیار موفقیت و محدودیت‌های حریم خصوصی.",
+ harness: "پروژه محلی، دستیار کدنویسی نصب‌شده و مشخص بودن ابزارهایی که لازم دارید."
+};
 
 /* ── تم ─────────────────────────────────────────────── */
 const THEME_KEY = "ecc-theme";
@@ -169,7 +190,7 @@ function cardHtml(s, compact = false) {
       </div>
       ${compact ? "" : `<p class="card__summary">${esc(s.summary || "")}</p>`}
       <div class="card__foot">
-        <span class="card__count">${fa(s.skills?.length || 0)} اسکیل · ${fa(s.commands?.length || 0)} دستور · ${fa(s.agents?.length || 0)} agent</span>
+        <span class="card__count">${fa(s.skills?.length || 0)} مهارت · ${fa(s.prompts?.length || 0)} متن آماده</span>
         <span class="card__open" aria-hidden="true">دیدن مسیر ←</span>
       </div>
     </a>
@@ -226,10 +247,11 @@ function renderPlaybook(id) {
   $("#pbTitle").textContent = s.title;
   $("#pbTagline").textContent = s.tagline || "";
   $("#pbSummary").textContent = s.summary || "";
+  $("#pbNeeds").textContent = NEEDS[s.id] || "هدف پروژه، مخاطب، نمونه مورد علاقه و امکانات لازم را مشخص کنید.";
 
   $("#pbMeta").innerHTML = [
     `<span class="tag tag--accent">${esc(s.tagline || "")}</span>`,
-    ...(s.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`),
+
     `<span class="tag">${fa(s.steps?.length || 0)} مرحله</span>`,
     `<span class="tag">${fa(s.prompts?.length || 0)} پرامپت آماده</span>`,
   ].join("");
@@ -244,8 +266,8 @@ function renderPlaybook(id) {
     .map(
       (st, i) => `
       <li id="step-${i + 1}">
-        <label class="step-check"><input type="checkbox" data-step="${i}" ${progressFor(s.id).steps.includes(i) ? "checked" : ""} /><span class="step-title">${esc(st.t)}</span></label>
-        <p>${esc(st.d)}</p>
+        <label class="step-check"><input type="checkbox" data-step="${i}" ${progressFor(s.id).steps.includes(i) ? "checked" : ""} /><span class="step-title">${esc(st.simpleTitle || st.t)}</span></label>
+        <details class="step-detail"><summary>توضیح فنی و ابزارهای پیشنهادی</summary><p>${esc(st.d)}</p></details>
         ${st.cmds?.length ? `<div class="cmds">${st.cmds.map((c) => `<button type="button" class="cmd-chip" data-copy-text="${esc(String(c))}" title="کپی">${esc(c)}</button>`).join("")}</div>` : ""}
       </li>`
     )
@@ -262,9 +284,8 @@ function renderPlaybook(id) {
     .map(([label, items]) => `<div class="toolbox__group"><h4>${label}</h4><div class="toolbox__items">${items.join("")}</div></div>`)
     .join("");
 
-  const profile = s.install?.profile || "developer";
-  const skillArg = s.install?.skills ? ` \\\n  --skills ${s.install.skills}` : "";
-  const cmd = `git clone https://github.com/affaan-m/ecc.git && cd ecc\n./install.sh --profile ${profile} --target claude${skillArg}`;
+  // کیت محلی گزیده است و ممکن است همه ابزارهای کاتالوگ را نداشته باشد.
+  const cmd = "./kit/install-kit.sh --dry-run";
   $("#pbInstall").textContent = cmd;
   const copyBtn = $("#pbInstall").parentElement.querySelector(".cmd__copy");
   copyBtn.dataset.copyText = cmd;
@@ -311,8 +332,11 @@ function renderLibrary() {
   const mine = state.libOnlyMine ? myNames(state.libKind) : null;
   const filtered = list.filter((x) => {
     if (mine && !mine.has(x.name)) return false;
+    const paths = state.services.filter(s => (s[state.libKind] || []).includes(x.name));
+    if (state.libCategory === "other" && paths.length) return false;
+    if (state.libCategory !== "all" && state.libCategory !== "other" && !paths.some(s => s.id === state.libCategory)) return false;
     if (!q) return true;
-    return normalize(x.name).includes(q) || normalize(x.desc).includes(q);
+    return normalize(x.name).includes(q) || normalize(x.desc).includes(q) || normalize(paths.map(p => p.title).join(" ")).includes(q);
   });
   const slice = filtered.slice(0, state.libLimit);
 
@@ -323,7 +347,8 @@ function renderLibrary() {
       <button class="lib__name" type="button" data-copy-text="${esc(state.libKind === "commands" ? "/" + x.name : x.name)}" title="کپی نام">
         <span class="mark" aria-hidden="true">${state.libKind === "commands" ? "/" : state.libKind === "agents" ? "@" : "◇"}</span>${esc(x.name)}
       </button>
-      <p class="lib__desc">${esc(x.desc || "—")}</p>
+      <p class="lib__desc">${(() => { const paths = state.services.filter(s => (s[state.libKind] || []).includes(x.name)); return paths.length ? `پیشنهاد شده برای: ${paths.map(p => `<a href="#/s/${esc(p.id)}">${esc(p.title)}</a>`).join("، ")}` : "هنوز به مسیری در این برنامه اضافه نشده است."; })()}</p>
+      <details class="original-desc"><summary>توضیح اصلی به زبان انگلیسی</summary><p dir="ltr">${esc((x.desc || "—").replace(/https?:\/\/github\.com\/[^\s)]+/gi, "[نشانی منبع]"))}</p></details>
     </li>`
     )
     .join("");
@@ -335,44 +360,10 @@ function renderLibrary() {
 }
 
 /* ── نصب ────────────────────────────────────────────── */
-const HARNESS = [
-  ["claude", "Claude Code", "./install.sh --profile developer --target claude"],
-  ["codex", "Codex CLI", "./install.sh --profile minimal --target codex"],
-  ["cursor", "Cursor", "./install.sh --profile minimal --target cursor"],
-  ["opencode", "OpenCode", "npm install && npm run build:opencode && ./install.sh --profile full --target opencode --enable-hooks"],
-  ["gemini", "Gemini CLI", "./install.sh --profile minimal --target gemini"],
-  ["copilot", "GitHub Copilot", "./install.sh --profile full --target copilot"],
-  ["zed", "Zed", "./install.sh --profile minimal --target zed"],
-  ["qwen", "Qwen CLI", "./install.sh --profile minimal --target qwen"],
-];
-
 function renderInstall() {
-  $("#harnessList").innerHTML = HARNESS.map(
-    ([id, name, cmd]) => `
-    <button class="harness__item" type="button" data-copy-text="${esc(cmd)}" title="کپی دستور">
-      <strong>${esc(name)}</strong>
-      <code>${esc(cmd)}</code>
-    </button>`
-  ).join("");
-
-  const cmds = [
-    ["کلون", "git clone https://github.com/affaan-m/ecc.git && cd ecc"],
-    ["پروفایل developer", "./install.sh --profile developer --target claude"],
-    ["بدون hook", "./install.sh --profile core --without baseline:hooks --target claude"],
-    ["نصب گزیده", "./install.sh --target claude --skills tdd-workflow,api-design,design-system"],
-  ];
-  $("#installCmds").innerHTML = cmds
-    .map(
-      ([label, cmd]) => `
-    <div class="cmd-group">
-      <span class="cmd-group__label">${esc(label)}</span>
-      <div class="cmd">
-        <code>${esc(cmd)}</code>
-        <button class="cmd__copy" type="button" data-copy-text="${esc(cmd)}">کپی</button>
-      </div>
-    </div>`
-    )
-    .join("");
+  $("#harnessList").innerHTML = '<p>کیت گزیده برای پوشهٔ تنظیمات Claude آماده است. برای ابزارهای دیگر فایل‌ها را مطابق راهنمای همان ابزار به‌صورت دستی استفاده کنید.</p>';
+  const cmds = [["پیش‌نمایش بدون تغییر فایل", "./kit/install-kit.sh --dry-run"], ["نصب کیت گزیده", "./kit/install-kit.sh"]];
+  $("#installCmds").innerHTML = cmds.map(([label, cmd]) => `<div class="cmd-group"><span class="cmd-group__label">${esc(label)}</span><div class="cmd"><code>${esc(cmd)}</code><button class="cmd__copy" type="button" data-copy-text="${esc(cmd)}">کپی</button></div></div>`).join("");
 }
 
 /* ── روتر ───────────────────────────────────────────── */
@@ -385,6 +376,8 @@ function parseRoute() {
   if (seg[0] === "library") return { view: "library" };
   if (seg[0] === "install") return { view: "install" };
   if (seg[0] === "fcc") return { view: "fcc" };
+  if (seg[0] === "plans") return { view: "plans" };
+  if (seg[0] === "admin") return { view: "admin" };
   if (seg[0] === "workspace") return { view: "workspace" };
   if (seg[0] === "s" && seg[1]) return { view: "playbook", id: seg[1], anchor: seg[2] };
   return { view: "home" };
@@ -461,6 +454,7 @@ document.addEventListener("click", (e) => {
 
 $("#serviceSearch")?.addEventListener("input", (e) => { state.serviceQuery = e.target.value; renderServices(); });
 
+$("#libCategory")?.addEventListener("change", (e) => { state.libCategory = e.target.value; state.libLimit = 60; renderLibrary(); });
 $("#libSearch")?.addEventListener("input", (e) => { state.libQuery = e.target.value; state.libLimit = 60; renderLibrary(); });
 $("#libOnlyMine")?.addEventListener("change", (e) => { state.libOnlyMine = e.target.checked; state.libLimit = 60; renderLibrary(); });
 $$(".tab").forEach((tab) =>
@@ -514,9 +508,9 @@ let paletteTrigger = null;
 function paletteItems() {
   const items = [];
   state.services.forEach((s) => items.push({ type: "مسیر", label: s.title, desc: s.tagline || "", href: `#/s/${s.id}` }));
-  state.data.skills.forEach((s) => items.push({ type: "اسکیل", label: s.name, desc: s.desc || "", copy: s.name }));
-  state.data.commands.forEach((s) => items.push({ type: "دستور", label: "/" + s.name, desc: s.desc || "", copy: "/" + s.name }));
-  state.data.agents.forEach((s) => items.push({ type: "agent", label: "@" + s.name, desc: s.desc || "", copy: s.name }));
+  state.data.skills.forEach((s) => items.push({ type: "اسکیل", label: s.name, desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: s.name }));
+  state.data.commands.forEach((s) => items.push({ type: "دستور", label: "/" + s.name, desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: "/" + s.name }));
+  state.data.agents.forEach((s) => items.push({ type: "agent", label: "@" + s.name, desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: s.name }));
   return items;
 }
 let palCache = null;
@@ -612,6 +606,7 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 (async () => {
   try {
     await ready;
+    $("#libCategory").insertAdjacentHTML("beforeend", state.services.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join(""));
     renderPopular();
     renderTagFilter();
     renderServices();

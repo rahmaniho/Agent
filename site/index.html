@@ -14,13 +14,13 @@
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Agent Studio" />
 <meta property="og:locale" content="fa_IR" />
-<meta property="og:title" content="ECC Playbook — مسیر و پرامپت آماده برای هر خدمت" />
-<meta property="og:description" content="۱۵ مسیر خدمت و ۳۸ پرامپت آماده، نگاشت‌شده روی کاتالوگ ۳۱۴ اسکیل، ۹۸ دستور و ۷۱ agent ریپوی ECC." />
+<meta property="og:title" content="ECC Playbook — مسیر و متن آماده برای هر خدمت" />
+<meta property="og:description" content="۱۵ مسیر خدمت و ۳۸ متن آماده، نگاشت‌شده روی کاتالوگ ۳۱۴ اسکیل، ۹۸ دستور و ۷۱ agent ریپوی ECC." />
 <meta property="og:url" content="./" />
 <meta property="og:image" content="assets/og.svg" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Agent Studio" />
-<meta name="twitter:description" content="مسیر، ابزار و پرامپت آماده برای هر خدمت مهندسی نرم‌افزار، معماری و طراحی سایت." />
+<meta name="twitter:description" content="مسیر، ابزار و متن آماده برای هر خدمت مهندسی نرم‌افزار، معماری و طراحی سایت." />
 <meta name="twitter:image" content="assets/og.svg" />
 
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
@@ -30,25 +30,15 @@
 <link rel="stylesheet" href="assets/styles.css" />
 <link rel="stylesheet" href="assets/studio.css" />
 <link rel="stylesheet" href="assets/refinement.css" />
+<link rel="stylesheet" href="assets/entry.css" />
 
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "ECC Playbook",
-  "inLanguage": "fa-IR",
-  "description": "نگاشت نیازهای مهندسی نرم‌افزار، معماری و طراحی سایت به اسکیل‌ها، دستورها و پرامپت‌های آمادهٔ ریپوی affaan-m/ECC",
-  "about": {
-    "@type": "SoftwareSourceCode",
-    "name": "ECC",
-    "codeRepository": "https://github.com/affaan-m/ecc",
-    "license": "https://opensource.org/licenses/MIT"
-  }
-}
-</script>
+
 </head>
 <body>
 <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol><symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="19" r="2"/><path d="M8 5h4a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h7"/></symbol><symbol id="i-library" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h3v18H6a2 2 0 0 1-2-2zM9 5h4v16H9zM13 6l4-1 3 15-4 1z"/></symbol><symbol id="i-code" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3m6 0h4"/></symbol><symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 18v2h16v-2"/></symbol><symbol id="i-external" viewBox="0 0 24 24"><path d="M13 5h6v6M19 5l-9 9M19 14v5H5V5h5"/></symbol><symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.5 14 9l6.5 3-6.5 2L12 21l-2-7-6.5-2L10 9z"/></symbol><symbol id="i-arrow" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6"/></symbol><symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol></svg>
+<div id="loginGate" class="login-gate" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+  <div class="login-card"><div class="login-form-panel"><a class="login-brand" href="#/" aria-label="استودیو ایجنت">✳ <span>Agent Studio <small>فضای ساخت ایده‌ها</small></span></a><div id="authLoggedOut"><span class="login-eyebrow">فضای ساخت ایده‌ها ✳</span><h1 id="loginTitle">خوش آمدید!</h1><p>وارد حساب خود شوید یا یک حساب تازه بسازید. برای ساخت حساب، ایمیل تأیید را بررسی کنید.</p><form id="authForm" class="studio-form"><label>ایمیل<input id="authEmail" type="email" autocomplete="email" required dir="ltr" /></label><label>رمز عبور<input id="authPassword" type="password" autocomplete="current-password" minlength="6" required dir="ltr" /></label><div class="form-actions"><button type="submit" class="btn btn--solid">ورود</button><button type="button" id="signUp" class="btn btn--outline">ساخت حساب</button></div></form></div><p id="authStatus" role="status" class="form-status">در حال آماده‌سازی حساب...</p><button id="guestAccess" class="guest-access" type="button">فعلاً بدون ورود ادامه می‌دهم ←</button><p class="login-footnote">بدون ورود می‌توانید راهنماها را ببینید؛ برای ذخیره یادداشت‌ها باید وارد شوید.</p></div><div class="login-art"><div class="login-art-copy"><span>از ایده تا نتیجه</span><h2>برای هر ایده،<br>یک نقطه شروع روشن.</h2><p>مسیر مناسب را پیدا کنید، ابزارها را بشناسید و قدم به قدم پیش بروید.</p></div><img src="assets/studio-illustration.png" alt="" width="1376" height="768" /></div></div>
+</div>
 <a class="skip" href="#main">پرش به محتوا</a>
 
 <aside class="sidebar" aria-label="ناوبری اصلی">
@@ -60,13 +50,11 @@
     <a href="#/library" data-nav="library"><svg class="nav-icon icon" aria-hidden="true"><use href="#i-library"/></svg> کتابخانه ابزارها</a>
     <a href="#/fcc" data-nav="fcc"><svg class="nav-icon icon" aria-hidden="true"><use href="#i-code"/></svg> Free Claude Code <span class="side-new">جدید</span></a>
     <a href="#/workspace" data-nav="workspace"><svg class="nav-icon icon" aria-hidden="true"><use href="#i-user"/></svg> فضای شخصی</a>
+    <a href="#/plans" data-nav="plans"><svg class="nav-icon icon" aria-hidden="true"><use href="#i-spark"/></svg> طرح‌های اشتراک</a>
+    <a href="#/admin" data-nav="admin"><svg class="nav-icon icon" aria-hidden="true"><use href="#i-grid"/></svg> مدیریت اشتراک‌ها</a>
     <a href="#/install" data-nav="install"><svg class="nav-icon icon" aria-hidden="true"><use href="#i-download"/></svg> نصب و راه‌اندازی</a>
   </nav>
-  <div class="sidebar-label resources-label">منابع</div>
-  <nav class="side-nav" aria-label="منابع">
-    <a href="https://github.com/rahmaniho/Agent" target="_blank" rel="noopener"><svg class="nav-icon icon" aria-hidden="true"><use href="#i-external"/></svg> مخزن پروژه <span class="external">↗</span></a>
-    <a href="https://github.com/Alishahryar1/free-claude-code" target="_blank" rel="noopener"><svg class="nav-icon icon" aria-hidden="true"><use href="#i-external"/></svg> مستندات FCC <span class="external">↗</span></a>
-  </nav>
+
   <div class="side-bottom"><div class="side-help-icon">✦</div><strong>ایده‌ای در ذهن داری؟</strong><p>از یک مسیر آماده شروع کن و سریع‌تر به نتیجه برس.</p><a href="#/services">شروع یک مسیر <span>←</span></a></div>
   <div class="side-profile"><span class="avatar">A</span><span><strong>Agent Studio</strong><small>محیط کاری شخصی</small></span><span class="profile-more">···</span></div>
 </aside>
@@ -76,7 +64,6 @@
     <div class="topbar__actions">
       <button class="top-search" id="searchOpen" type="button" aria-label="جست‌وجوی سریع"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> جست‌وجو در ابزارها و مسیرها... <kbd>Ctrl K</kbd></button>
       <button class="btn btn--ghost btn--icon" id="themeToggle" type="button" aria-label="تغییر تم روشن/تاریک"><span id="themeIcon" aria-hidden="true">◐</span></button>
-      <a class="top-github" href="https://github.com/rahmaniho/Agent" target="_blank" rel="noopener">GitHub ↗</a>
     </div>
   </div>
   <div class="topbar__progress" id="routeProgress" aria-hidden="true"></div>
@@ -92,7 +79,7 @@
         <div class="hero-copy"><div class="hero-badge"><span></span> جعبه‌ابزار ساخت شما</div><h2>برای ساختن،<br /><em>از مسیر درست شروع کن.</em></h2><p>از طراحی یک ایده تا توسعه و انتشار؛ مسیرها، اسکیل‌ها و پرامپت‌های آماده کنار تو هستند.</p><div class="hero-actions"><a href="#/services" class="hero-primary">انتخاب مسیر کاری <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a><a href="#/library" class="hero-secondary">کاوش ابزارها <span>↗</span></a></div><div class="hero-note"><span>✳</span> ساخته‌شده برای سازندگان، توسعه‌دهندگان و تیم‌ها</div></div>
         <div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="workspace-preview"><div class="preview-top"><span><i></i><i></i><i></i></span><b>WORKSPACE / 01</b><em>✳</em></div><div class="preview-content"><div class="preview-label">THE CREATIVE PROCESS</div><div class="preview-title">From idea<br />to <em>impact.</em></div><div class="preview-divider"></div><div class="preview-flow"><span><b>01</b> PLAN</span><i></i><span><b>02</b> BUILD</span><i></i><span><b>03</b> SHIP</span></div></div><div class="preview-bottom"><span>✳</span><div>YOUR SPACE TO CREATE<small>AGENT STUDIO</small></div><b>↗</b></div></div><div class="floating-note"><span>✦</span><div>YOUR NEXT IDEA<small>starts here.</small></div></div></div>
       </div>
-      <div class="stats-row" aria-label="خلاصه ابزارهای موجود"><div class="stat"><span class="stat-icon purple"><svg class="icon"><use href="#i-spark"/></svg></span><div><strong data-bind="count-skills">۳۱۴</strong><small>اسکیل تخصصی</small></div></div><div class="stat"><span class="stat-icon blue"><svg class="icon"><use href="#i-user"/></svg></span><div><strong data-bind="count-agents">۷۱</strong><small>ایجنت تخصصی</small></div></div><div class="stat"><span class="stat-icon peach"><svg class="icon"><use href="#i-code"/></svg></span><div><strong data-bind="count-prompts">۳۸</strong><small>پرامپت آماده</small></div></div><div class="stat"><span class="stat-icon green"><svg class="icon"><use href="#i-route"/></svg></span><div><strong data-bind="count-services">۱۵</strong><small>مسیر کاری</small></div></div></div>
+      <div class="stats-row" aria-label="خلاصه ابزارهای موجود"><div class="stat"><span class="stat-icon purple"><svg class="icon"><use href="#i-spark"/></svg></span><div><strong data-bind="count-skills">۳۱۴</strong><small>مهارت تخصصی</small></div></div><div class="stat"><span class="stat-icon blue"><svg class="icon"><use href="#i-user"/></svg></span><div><strong data-bind="count-agents">۷۱</strong><small>دستیار تخصصی</small></div></div><div class="stat"><span class="stat-icon peach"><svg class="icon"><use href="#i-code"/></svg></span><div><strong data-bind="count-prompts">۳۸</strong><small>متن آماده</small></div></div><div class="stat"><span class="stat-icon green"><svg class="icon"><use href="#i-route"/></svg></span><div><strong data-bind="count-services">۱۵</strong><small>مسیر کاری</small></div></div></div>
       <div class="dashboard-grid"><div class="dashboard-main"><div class="dash-heading"><div><span class="section-kicker">از اینجا شروع کن <span class="kicker-line"></span></span><h2>مسیر مناسب کارت رو پیدا کن</h2><p>چند نقطه شروع پیشنهادی برای ساخت پروژه بعدی‌ات.</p></div><a href="#/services">مشاهده همه مسیرها <span>←</span></a></div><ul class="cards cards--compact" id="popularCards"></ul></div>
       <aside class="dashboard-aside"><div class="aside-heading"><span class="section-kicker">ابزارهای استودیو <span class="kicker-line"></span></span><h2>همه‌چیز در دسترس</h2><p>راه‌های بیشتری برای پیش بردن پروژه.</p></div><a class="tool-link tool-link--dark" href="#/fcc"><span class="tool-link-icon"><svg class="icon"><use href="#i-code"/></svg></span><span><small>LOCAL AGENT</small><strong>Free Claude Code</strong><em>اجرای ایجنت روی دستگاه خودت</em></span><b>↖</b></a><a class="tool-link" href="#/library"><span class="tool-link-icon"><svg class="icon"><use href="#i-library"/></svg></span><span><small>EXPLORE</small><strong>کتابخانه ابزارها</strong><em>اسکیل‌ها، دستورها و ایجنت‌ها</em></span><b>←</b></a><a class="tool-link" href="#/workspace"><span class="tool-link-icon"><svg class="icon"><use href="#i-user"/></svg></span><span><small>YOUR SPACE</small><strong>فضای شخصی</strong><em>یادداشت‌های پروژه‌ات، یک‌جا</em></span><b>←</b></a></aside></div>
       <section class="journey-panel" aria-labelledby="journeyTitle"><div class="journey-header"><div><span class="section-kicker">فضای کار من <span class="kicker-line"></span></span><h2 id="journeyTitle">مسیرهای ذخیره‌شده</h2><p>علاقه‌مندی‌ها و پیشرفت مراحل روی همین مرورگر ذخیره می‌شوند.</p></div><a href="#/services">همه مسیرها ←</a></div><div id="journeyList" class="journey-list"></div></section>
@@ -103,7 +90,7 @@
   <!-- ══════════ PERSONAL WORKSPACE ══════════ -->
   <section class="view workspace-view" data-view="workspace" hidden>
     <div class="wrap page-head"><nav class="crumbs" aria-label="مسیر"><a href="#/">خانه</a><span>/</span><span>فضای شخصی</span></nav><span class="section-kicker">SUPABASE · فضای خصوصی</span><h1>فضای شخصی شما</h1><p class="section__sub">با حساب خود وارد شوید و یادداشت‌های پروژه را در فضای خصوصی‌تان نگه دارید.</p></div>
-    <div class="wrap workspace-grid"><section class="fcc-section"><div id="authLoggedOut"><h2>ورود یا ساخت حساب</h2><p>با ایمیل و رمز عبور وارد شوید. برای ساخت حساب ممکن است تأیید ایمیل لازم باشد.</p><form id="authForm" class="studio-form"><label>ایمیل<input id="authEmail" type="email" autocomplete="email" required dir="ltr" /></label><label>رمز عبور<input id="authPassword" type="password" autocomplete="current-password" minlength="6" required dir="ltr" /></label><div class="form-actions"><button type="submit" class="btn btn--solid">ورود</button><button type="button" id="signUp" class="btn btn--outline">ساخت حساب</button></div></form></div><div id="authLoggedIn" hidden><h2>حساب شما</h2><p id="accountEmail" dir="ltr"></p><button id="signOut" class="btn btn--outline" type="button">خروج از حساب</button></div><p id="authStatus" role="status" class="form-status">در حال آماده‌سازی فضای شخصی...</p></section><section class="fcc-section"><div class="notes-heading"><h2>یادداشت‌های پروژه</h2><button id="notesRefresh" class="btn btn--outline" type="button" disabled>به‌روزرسانی</button></div><p>یادداشت‌ها فقط برای حساب شما قابل مشاهده‌اند.</p><form id="noteForm" class="studio-form"><label>یادداشت<textarea id="noteContent" maxlength="4000" rows="4" required placeholder="ایده، پرامپت یا نکته پروژه..."></textarea></label><button class="btn btn--solid" type="submit">ذخیره یادداشت</button></form><p id="noteStatus" role="status" class="form-status">برای مشاهده و ذخیره یادداشت وارد شوید.</p><ul id="notesList" class="notes-list"></ul><button id="notesMore" type="button" class="btn btn--outline" hidden>یادداشت‌های بیشتر</button></section></div>
+    <div class="wrap workspace-grid"><section class="fcc-section"><div id="workspaceLoggedOut"><h2>حساب کاربری</h2><p>برای نگهداری یادداشت‌ها و دیدن اشتراک خود، وارد حساب شوید.</p><button id="openLogin" class="btn btn--solid" type="button">ورود یا ساخت حساب</button> <a href="#/plans" class="btn btn--outline">طرح‌های اشتراک</a></div><div id="authLoggedIn" hidden><h2>حساب شما</h2><p id="accountEmail" dir="ltr"></p><div class="account-plan"><span>اشتراک شما</span><strong id="accountPlan">در حال بررسی...</strong><small id="accountExpiry"></small></div><a class="btn btn--outline" href="#/plans">دیدن طرح‌ها</a> <button id="signOut" class="btn btn--outline" type="button">خروج از حساب</button></div><p class="account-admin-link"><a href="#/admin">رفتن به بخش مدیر ←</a></p></section><section class="fcc-section"><div class="notes-heading"><h2>یادداشت‌های پروژه</h2><button id="notesRefresh" class="btn btn--outline" type="button" disabled>به‌روزرسانی</button></div><p>یادداشت‌ها فقط برای حساب شما قابل مشاهده‌اند.</p><form id="noteForm" class="studio-form"><label>یادداشت<textarea id="noteContent" maxlength="4000" rows="4" required placeholder="ایده، پرامپت یا نکته پروژه..."></textarea></label><button class="btn btn--solid" type="submit">ذخیره یادداشت</button></form><p id="noteStatus" role="status" class="form-status">برای مشاهده و ذخیره یادداشت وارد شوید.</p><ul id="notesList" class="notes-list"></ul><button id="notesMore" type="button" class="btn btn--outline" hidden>یادداشت‌های بیشتر</button></section></div>
   </section>
 
   <!-- ══════════ FREE CLAUDE CODE ══════════ -->
@@ -117,7 +104,7 @@
       <form id="agentCreate" class="studio-form agent-create"><label>مسیر کامل پوشه پروژه روی دستگاه<input id="agentCwd" dir="ltr" placeholder="/path/to/project" required /></label><button class="btn btn--solid" type="submit">＋ جلسه جدید</button></form>
       <div class="agent-workspace"><div class="agent-sessions"><div class="agent-sessions-head"><strong>جلسه‌های اخیر</strong><button type="button" id="agentReloadSessions" aria-label="به‌روزرسانی جلسه‌ها">↻</button></div><p class="agent-help">تا ۲۵ جلسه اخیر در FCC</p><div id="agentSessionsList" class="agent-session-list"><p>پس از اتصال نمایش داده می‌شود.</p></div></div>
       <div class="agent-conversation"><div id="agentEmpty" class="agent-empty"><span>✳</span><strong>آماده برای ساختن؟</strong><p>یک جلسه جدید بسازید یا یکی از جلسه‌های اخیر را انتخاب کنید.</p></div><div id="agentSession" hidden><div class="agent-session-header"><div><span class="section-kicker">جلسه فعال</span><p id="agentSessionLabel"></p></div><button class="btn btn--outline" id="agentRefresh" type="button">به‌روزرسانی</button></div><div id="agentOutput" class="agent-output" aria-live="polite"></div><form id="agentSend" class="studio-form"><label>درخواست شما<textarea id="agentText" rows="3" maxlength="100000" required placeholder="وظیفه ایجنت را بنویسید..."></textarea></label><div class="form-actions"><button class="btn btn--solid" type="submit">ارسال به ایجنت ←</button><button class="btn btn--outline" id="agentStop" type="button" disabled>توقف اجرا</button></div></form><p class="agent-help">برای تأیید درخواست‌های دسترسی و تنظیم مدل، از رابط Admin محلی FCC استفاده کنید.</p></div></div></div>
-    </section><section class="fcc-section"><h2>شروع در چند قدم</h2><p>این وب‌اپ راهنماست و به‌تنهایی مدل یا سرور FCC را اجرا نمی‌کند. برای استفاده، FCC را روی دستگاه خود نصب و پیکربندی کنید.</p><ol class="fcc-steps"><li><b>۱</b><div><strong>نصب Free Claude Code</strong><p>طبق راهنمای رسمی، نصب‌کننده مناسب سیستم‌عامل خود را اجرا کنید و حداقل یک ایجنت انتخاب کنید.</p><a href="https://github.com/Alishahryar1/free-claude-code#quick-start" target="_blank" rel="noopener">مشاهده راهنمای نصب رسمی ↗</a></div></li><li><b>۲</b><div><strong>اجرای سرور و تنظیم ارائه‌دهنده</strong><p>در لینوکس دستور زیر را اجرا کنید؛ در ویندوز و مک برنامه را از منوی برنامه‌ها باز کنید. سپس در Admin UI ارائه‌دهنده و کلید خود را تنظیم کنید.</p><div class="cmd"><code dir="ltr">fcc-server</code><button class="cmd__copy" type="button" data-copy-text="fcc-server">کپی</button></div></div></li><li><b>۳</b><div><strong>اجرای ایجنت</strong><p>پس از پیکربندی مدل، ایجنت نصب‌شده را از ترمینال اجرا کنید؛ برای مثال:</p><div class="cmd"><code dir="ltr">fcc-claude</code><button class="cmd__copy" type="button" data-copy-text="fcc-claude">کپی</button></div></div></li></ol></section></div><aside><div class="fcc-info"><span class="fcc-icon">⌘</span><h2>ساخته شده برای انعطاف</h2><p>پشتیبانی از چندین ایجنت و ارائه‌دهنده، با امکاناتی مثل fallback و کنترل محدودیت درخواست.</p><div class="fcc-tags"><span>Claude Code</span><span>Codex</span><span>OpenCode</span></div><p class="fcc-disclaimer">دسترسی و محدودیت پلن‌های رایگان به ارائه‌دهنده بستگی دارد و ممکن است تغییر کند. کلیدهای API خود را فقط در محیط امن FCC وارد کنید.</p><a href="https://github.com/Alishahryar1/free-claude-code" target="_blank" rel="noopener">مخزن و مستندات اصلی ↗</a><p class="license">Free Claude Code · AGPL-3.0-only<br />© 2026 Ali Khokhar · بدون ضمانت</p></div></aside></div>
+    </section><section class="fcc-section"><h2>شروع در چند قدم</h2><p>این وب‌اپ راهنماست و به‌تنهایی مدل یا سرور FCC را اجرا نمی‌کند. برای استفاده، FCC را روی دستگاه خود نصب و پیکربندی کنید.</p><ol class="fcc-steps"><li><b>۱</b><div><strong>نصب Free Claude Code</strong><p>طبق راهنمای رسمی، نصب‌کننده مناسب سیستم‌عامل خود را اجرا کنید و حداقل یک ایجنت انتخاب کنید.</p><p>راهنمای نصب در فایل‌های پروژه در پوشهٔ <code dir="ltr">free-claude-code</code> موجود است.</p></div></li><li><b>۲</b><div><strong>اجرای سرور و تنظیم ارائه‌دهنده</strong><p>در لینوکس دستور زیر را اجرا کنید؛ در ویندوز و مک برنامه را از منوی برنامه‌ها باز کنید. سپس در Admin UI ارائه‌دهنده و کلید خود را تنظیم کنید.</p><div class="cmd"><code dir="ltr">fcc-server</code><button class="cmd__copy" type="button" data-copy-text="fcc-server">کپی</button></div></div></li><li><b>۳</b><div><strong>اجرای ایجنت</strong><p>پس از پیکربندی مدل، ایجنت نصب‌شده را از ترمینال اجرا کنید؛ برای مثال:</p><div class="cmd"><code dir="ltr">fcc-claude</code><button class="cmd__copy" type="button" data-copy-text="fcc-claude">کپی</button></div></div></li></ol></section></div><aside><div class="fcc-info"><span class="fcc-icon">⌘</span><h2>ساخته شده برای انعطاف</h2><p>پشتیبانی از چندین ایجنت و ارائه‌دهنده، با امکاناتی مثل fallback و کنترل محدودیت درخواست.</p><div class="fcc-tags"><span>Claude Code</span><span>Codex</span><span>OpenCode</span></div><p class="fcc-disclaimer">دسترسی و محدودیت پلن‌های رایگان به ارائه‌دهنده بستگی دارد و ممکن است تغییر کند. کلیدهای API خود را فقط در محیط امن FCC وارد کنید.</p><p class="license">Free Claude Code · AGPL-3.0-only<br />© 2026 Ali Khokhar · بدون ضمانت</p></div></aside></div>
   </section>
 
   <!-- ══════════ SERVICES ══════════ -->
@@ -125,7 +112,7 @@
     <div class="wrap page-head">
       <nav class="crumbs" aria-label="مسیر"><a href="#/">خانه</a><span aria-hidden="true">/</span><span>خدمت‌ها</span></nav>
       <h1>چه کاری در پیش داری؟</h1>
-      <p class="section__sub">یک کارت را انتخاب کن تا مسیر گام‌به‌گام، ابزارها و پرامپت‌های آمادهٔ همان کار باز شود.</p>
+      <p class="section__sub">انتخاب کنید چه چیزی می‌خواهید بسازید. در هر مسیر، نیازهای اولیه، مهارت‌ها و متن‌های آماده را می‌بینید.</p><div class="explain-strip"><span>✦</span><p><strong>تازه‌کار هستید؟</strong> «مهارت» یک راهنمای تخصصی است؛ «پرامپت» متنی است که به دستیار هوش مصنوعی می‌دهید. لازم نیست همه را از قبل بشناسید.</p></div>
       <div class="tools-row">
         <label class="srch">
           <span class="srch__ico" aria-hidden="true">⌕</span>
@@ -158,7 +145,7 @@
           <button class="btn btn--outline" id="pbPrint" type="button">چاپ / PDF</button>
         </div>
       </div>
-      <p class="pb-summary" id="pbSummary"></p>
+      <p class="pb-summary" id="pbSummary"></p><div class="needs-box"><span>✦</span><div><strong>برای شروع به چه چیزهایی نیاز دارید؟</strong><p id="pbNeeds"></p><small>ابزارهای پیشنهادی و متن‌های آماده در ادامه آمده‌اند.</small></div></div>
       <div class="pb__meta" id="pbMeta"></div>
       <nav class="pb-toc" aria-label="فهرست این مسیر" id="pbToc"></nav>
     </div>
@@ -172,7 +159,7 @@
         </section>
 
         <section class="pb-block" aria-labelledby="h-prompts">
-          <h2 class="pb__h" id="h-prompts">پرامپت‌های آماده <span class="hint">— جای <code>{…}</code> را پر کن</span></h2>
+          <h2 class="pb__h" id="h-prompts">متن‌های آماده برای دستیار <span class="hint">— جای <code>{…}</code> را با اطلاعات خود پر کنید</span></h2>
           <div class="prompts" id="pbPrompts"></div>
         </section>
 
@@ -184,7 +171,7 @@
 
       <aside class="pb-side" aria-label="جعبه‌ابزار">
         <section class="side-card">
-          <h2 class="pb__h">جعبه‌ابزار این مسیر</h2>
+          <h2 class="pb__h">مهارت‌ها و ابزارهای پیشنهادی</h2>
           <div class="toolbox" id="pbToolbox"></div>
         </section>
         <section class="side-card">
@@ -193,7 +180,7 @@
             <code id="pbInstall"></code>
             <button class="cmd__copy" data-copy-target="pbInstall" type="button" aria-label="کپی دستور نصب">کپی</button>
           </div>
-          <p class="note note--small">پروفایل و اسکیل‌ها بر اساس همین مسیر انتخاب شده‌اند.</p>
+          <p class="note note--small">پیش‌نمایش نصب کیت گزیده؛ ممکن است همه ابزارهای این مسیر در کیت موجود نباشند.</p>
         </section>
         <section class="side-card">
           <h2 class="pb__h">خروجی مورد انتظار</h2>
@@ -211,8 +198,8 @@
   <section class="view" data-view="library" hidden>
     <div class="wrap page-head">
       <nav class="crumbs" aria-label="مسیر"><a href="#/">خانه</a><span aria-hidden="true">/</span><span>کتابخانه</span></nav>
-      <h1>همهٔ <span data-bind="count-total">۴۸۳</span> جزء ECC</h1>
-      <p class="section__sub">جست‌وجو کن و نام دقیق را کپی کن؛ همین نام‌ها در اسکیل، دستور و agent استفاده می‌شوند.</p>
+      <h1>کتابخانه مهارت‌ها و ابزارها</h1>
+      <p class="section__sub">یک موضوع انتخاب کنید تا ابزارهای مناسب آن را ببینید. نام انگلیسی هر ابزار برای استفاده در دستیار لازم است.</p><label class="category-select">دسته‌بندی بر اساس کاری که می‌خواهید انجام دهید <select id="libCategory"><option value="all">همه موضوع‌ها</option><option value="other">سایر ابزارها (دسته‌بندی نشده)</option></select></label>
       <div class="tools-row">
         <label class="srch">
           <span class="srch__ico" aria-hidden="true">⌕</span>
@@ -237,23 +224,26 @@
     </div>
   </section>
 
+  <section class="view" data-view="plans" hidden><div class="wrap page-head"><span class="section-kicker">حساب شما</span><h1>طرح‌های اشتراک</h1><p class="section__sub">طرح‌ها به‌صورت دستی توسط مدیر فعال می‌شوند؛ در حال حاضر پرداخت آنلاین وجود ندارد.</p></div><div class="wrap plan-grid"><article class="plan-card"><span class="plan-icon">✧</span><h2>رایگان</h2><p>برای آشنایی و شروع</p><ul><li>دسترسی به مسیرها و متن‌های آماده</li><li>یادداشت خصوصی با ساخت حساب</li><li>پیشرفت ذخیره‌شده در همین مرورگر</li></ul><a href="#/services" class="btn btn--outline">دیدن مسیرها</a></article><article class="plan-card plan-card--plus"><span class="plan-icon">✦</span><span class="plan-badge">فعال‌سازی دستی</span><h2>پلاس</h2><p>اشتراک زمان‌دار برای حساب شما</p><ul><li>وضعیت و پایان اشتراک در فضای شخصی</li><li>مدیریت فعال‌سازی توسط مدیر</li><li>قیمت و مزایای اختصاصی هنوز تعیین نشده‌اند</li></ul><a href="#/workspace" class="btn btn--solid">دیدن حساب من</a></article></div><p class="wrap plan-note">در این نسخه همهٔ راهنماها برای همه قابل مشاهده‌اند و مزیت انحصاری یا پرداخت آنلاین فعال نیست. برای فعال‌سازی با مدیر مجموعه هماهنگ کنید.</p></section>
+  <section class="view" data-view="admin" hidden><div class="wrap page-head"><span class="section-kicker">مدیریت استودیو</span><h1>مدیریت اشتراک‌ها</h1><p class="section__sub">طرح هر حساب را ببینید و اشتراک پلاس را تا تاریخ مورد نظر فعال کنید.</p></div><div class="wrap"><section class="fcc-section admin-panel"><p id="adminStatus" role="status">برای بررسی دسترسی، وارد حساب خود شوید.</p><div id="adminContent" hidden><div class="admin-stats"><div><span>حساب‌های نمایش داده شده</span><strong id="adminUserCount">۰</strong></div><div><span>اشتراک‌های پلاس فعال</span><strong id="adminPlusCount">۰</strong></div></div><p>حداکثر ۵۰۰ حساب تازه نمایش داده می‌شود. تاریخ میلادی انتخابی تا پایان روز به وقت جهانی معتبر است. تغییرات بلافاصله ذخیره می‌شوند.</p><label>جست‌وجوی ایمیل <input id="adminSearch" type="search" placeholder="ایمیل کاربر" dir="ltr"></label><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>کاربر</th><th>وضعیت</th><th>پایان اشتراک</th><th>تغییر طرح</th></tr></thead><tbody id="adminUsers"></tbody></table></div></div></section></div></section>
+
   <!-- ══════════ INSTALL ══════════ -->
   <section class="view" data-view="install" hidden>
     <div class="wrap page-head">
       <nav class="crumbs" aria-label="مسیر"><a href="#/">خانه</a><span aria-hidden="true">/</span><span>نصب</span></nav>
       <h1>نصب و شروع</h1>
-      <p class="section__sub">سه قدم تا اجرا. برای هر هارنس (Claude Code، Codex، Cursor، OpenCode، Gemini، Zed، Copilot، …) هدف نصب جدا وجود دارد.</p>
+      <p class="section__sub">برای استفاده از ابزارهای تخصصی روی دستگاه، ابتدا نسخهٔ محلی پروژه و دستیار دلخواه خود را آماده کنید.</p>
     </div>
     <div class="wrap install">
       <div class="install__copy">
         <ol class="num-list">
-          <li><strong>کلون</strong> ریپو (یا نصب به‌عنوان پلاگین Claude Code).</li>
-          <li><strong>پروفایل</strong>: <code>minimal</code> برای context سبک، <code>developer</code> برای کار روی کد، <code>full</code> برای همه‌چیز. hookها تصمیم صریح می‌خواهند: <code>--enable-hooks</code> یا <code>--no-hooks</code>.</li>
+          <li>نسخهٔ محلی پروژه را روی دستگاه خود داشته باشید.</li>
+          <li>ابتدا پیش‌نمایش نصب را اجرا کنید تا ببینید چه فایل‌هایی کپی می‌شوند.</li>
           <li><strong>مسیر خدمت</strong> را باز کن و پرامپت‌های همان کار را اجرا کن.</li>
         </ol>
         <h2 class="pb__h">هارنس‌های پشتیبانی‌شده</h2>
         <div class="harness" id="harnessList"></div>
-        <p class="note">مستندات: <a href="https://github.com/affaan-m/ecc" target="_blank" rel="noopener">README ریپوی ECC</a> · برای هارنس بدون هدف بومی، <code>docs/MANUAL-ADAPTATION-GUIDE.md</code>.</p>
+        <p class="note">ابزارهای گزیده در پوشهٔ kit نسخهٔ محلی پروژه قرار دارند.</p>
       </div>
       <div class="install__code">
         <h2 class="pb__h">دستورها</h2>
@@ -267,11 +257,11 @@
 <footer class="foot">
   <div class="wrap foot__inner">
     <p>
-      محتوا از <a href="https://github.com/affaan-m/ecc" target="_blank" rel="noopener">affaan-m/ecc</a> نسخهٔ <span data-bind="version">2.2.3</span> ·
+      محتوا از ECC نسخهٔ <span data-bind="version">2.2.3</span> ·
       لایسنس MIT © Affaan Mustafa · Free Claude Code: AGPL-3.0-only © Ali Khokhar · این اپ مستقل است.
     </p>
     <p class="foot__meta">
-      کاتالوگ: <code>assets/data.js</code> · مسیرها: <code>assets/playbooks.json</code> · بازتولید: <code>node tools/gen-data.mjs --src ../ecc</code>
+      برای دیدن ابزارها و متن‌های آماده، از دسته‌بندی مسیرها شروع کنید.
     </p>
   </div>
 </footer>
@@ -305,7 +295,7 @@
 <script type="module" src="assets/lazy.js"></script>
 <noscript>
   <div class="wrap" style="padding:2rem 0">
-    <p>این اپ برای نمایش کاتالوگ به جاوااسکریپت نیاز دارد. محتوای منبع در <a href="https://github.com/affaan-m/ecc">ریپوی ECC</a> موجود است.</p>
+    <p>این اپ برای نمایش کاتالوگ به جاوااسکریپت نیاز دارد. برای شروع، جاوااسکریپت را در مرورگر فعال کنید.</p>
   </div>
 </noscript>
 </body>
