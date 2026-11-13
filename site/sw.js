@@ -1,5 +1,5 @@
 /* Static application cache. API calls and user data are never cached. */
-const CACHE = 'agent-studio-v6';
+const CACHE = 'agent-studio-v7';
 const ASSETS = [
   './', './index.html', './assets/styles.css', './assets/studio.css', './assets/refinement.css', './assets/app.js', './assets/lazy.js',
   './assets/entry.css', './assets/studio-illustration.png', './assets/workspace.js', './assets/agent.js', './assets/data.json', './assets/playbooks.json',

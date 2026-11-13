@@ -17,6 +17,16 @@ function page() {
   return dom;
 }
 
+test('the removed footer notice is not displayed', () => {
+  const dom = page();
+  try {
+    const text = dom.window.document.body.textContent;
+    assert.doesNotMatch(text, /محتوا از ECC نسخهٔ/);
+    assert.doesNotMatch(text, /این اپ مستقل است/);
+    assert.ok(dom.window.document.querySelector('.foot__meta'));
+  } finally { dom.window.close(); }
+});
+
 test('route progress persists and is shown on the dashboard', async () => {
   const dom = page(), w = dom.window, $ = s => w.document.querySelector(s);
   w.fetch = async url => ({ ok:true, json:async () => url.endsWith('playbooks.json') ? playbooks : data });
