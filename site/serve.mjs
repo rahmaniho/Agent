@@ -31,7 +31,7 @@ function proxyFcc(req, res, pathname) {
   if ((origin && origin !== `http://${localAuthority}`) || (req.method !== "GET" && origin !== `http://${localAuthority}`) || req.headers['sec-fetch-site'] === 'cross-site') return deny(403, "Invalid origin");
   const tail = pathname.slice('/api/fcc/'.length);
   const isUuid = '[0-9a-fA-F-]{36}';
-  const allowed = (req.method === 'GET' && (tail === 'bootstrap' || new RegExp(`^sessions/${isUuid}$`).test(tail))) ||
+  const allowed = (req.method === 'GET' && (tail === 'bootstrap' || tail === 'sessions' || new RegExp(`^sessions/${isUuid}$`).test(tail))) ||
     (req.method === 'POST' && (tail === 'sessions' || new RegExp(`^sessions/${isUuid}/(turns|stop)$`).test(tail)));
   if (!allowed || req.url.includes('?')) return deny(404, "Not found");
   const upstream = httpRequest({ hostname: '127.0.0.1', port: FCC_PORT, path: `/admin/api/code/${tail}`, method: req.method, headers: { host: `127.0.0.1:${FCC_PORT}`, origin: `http://127.0.0.1:${FCC_PORT}`, 'content-type': 'application/json', accept: 'application/json' } }, (response) => {

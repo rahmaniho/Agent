@@ -26,7 +26,7 @@ const ready = (async () => {
   ]);
   if (dataRes) state.data = dataRes;
   state.services = (pbRes && pbRes.services) || [];
-  if (!state.data.skills.length) throw new Error("کاتالوگ بارگذاری نشد");
+  if (!state.data.skills.length || !state.services.length) throw new Error("کاتالوگ یا مسیرها بارگذاری نشد");
   buildIndexes();
   paintStaticBindings();
 })();
@@ -45,7 +45,7 @@ const THEME_KEY = "ecc-theme";
 function applyTheme(t) {
   document.documentElement.dataset.theme = t;
   const meta = $('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", t === "dark" ? "#121110" : "#f6f2ea");
+  if (meta) meta.setAttribute("content", t === "dark" ? "#111b19" : "#f5f7f5");
   const ico = $("#themeIcon");
   if (ico) ico.textContent = t === "dark" ? "☀" : "◐";
   $("#themeToggle")?.setAttribute("aria-label", t === "dark" ? "تغییر به تم روشن" : "تغییر به تم تاریک");
@@ -125,6 +125,34 @@ function paintStaticBindings() {
     else if (key in counts) el.textContent = fa(counts[key]);
   });
   document.title = `Agent Studio — ${fa(state.services.length)} مسیر کاری و ابزارهای ایجنت`;
+}
+
+/* ── پیشرفت محلی مسیرها ────────────────────────────── */
+const PROGRESS_KEY = "agent-studio-progress-v1";
+let progress = {};
+try { const saved = JSON.parse(localStorage.getItem(PROGRESS_KEY) || "{}"); if (saved && typeof saved === "object" && !Array.isArray(saved)) progress = saved; } catch {}
+function progressFor(id) {
+  const item = progress[id];
+  return { favorite: item?.favorite === true, steps: Array.isArray(item?.steps) ? item.steps.filter((i) => Number.isInteger(i) && i >= 0) : [] };
+}
+function saveProgress(id, item) {
+  progress[id] = item;
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch { toast("ذخیره روی مرورگر ممکن نبود."); }
+}
+function renderJourney() {
+  const host = $("#journeyList");
+  const items = state.services.filter((s) => { const p = progressFor(s.id); return p.favorite || p.steps.some((i) => i < (s.steps?.length || 0)); });
+  if (!items.length) { host.innerHTML = `<div class="journey-empty"><span>✧</span><div><strong>هنوز مسیری ذخیره نشده</strong><p>یک مسیر را باز کنید، ذخیره کنید و مراحل انجام‌شده را علامت بزنید.</p></div><a href="#/services">انتخاب مسیر ←</a></div>`; return; }
+  host.innerHTML = items.map((s) => {
+    const p = progressFor(s.id), total = s.steps?.length || 0, done = new Set(p.steps.filter((i) => i < total)).size;
+    return `<a href="#/s/${esc(s.id)}" class="journey-item"><span class="journey-icon">${esc(s.icon || "◆")}</span><span class="journey-item-body"><strong>${esc(s.title)} ${p.favorite ? "★" : ""}</strong><small>${fa(done)} از ${fa(total)} مرحله انجام شده</small><span class="journey-track"><i style="width:${total ? Math.round(done / total * 100) : 0}%"></i></span></span><span aria-hidden="true">←</span></a>`;
+  }).join("");
+}
+function paintProgress(s) {
+  const p = progressFor(s.id), total = s.steps?.length || 0, done = new Set(p.steps.filter((i) => i < total)).size;
+  const fav = $("#favoritePlaybook");
+  fav.setAttribute("aria-pressed", String(p.favorite)); fav.textContent = p.favorite ? "★ مسیر ذخیره شد" : "☆ ذخیره مسیر";
+  $("#pbProgress").textContent = `${fa(done)} از ${fa(total)} مرحله انجام شده · ذخیره در همین مرورگر`;
 }
 
 /* ── کارت‌های خدمت ──────────────────────────────────── */
@@ -216,12 +244,14 @@ function renderPlaybook(id) {
     .map(
       (st, i) => `
       <li id="step-${i + 1}">
-        <h3>${esc(st.t)}</h3>
+        <label class="step-check"><input type="checkbox" data-step="${i}" ${progressFor(s.id).steps.includes(i) ? "checked" : ""} /><span class="step-title">${esc(st.t)}</span></label>
         <p>${esc(st.d)}</p>
-        ${st.cmds?.length ? `<div class="cmds">${st.cmds.map((c) => `<button type="button" class="cmd-chip" data-copy-text="${esc(String(c).replace(/^[/]/, ""))}" title="کپی">${esc(c)}</button>`).join("")}</div>` : ""}
+        ${st.cmds?.length ? `<div class="cmds">${st.cmds.map((c) => `<button type="button" class="cmd-chip" data-copy-text="${esc(String(c))}" title="کپی">${esc(c)}</button>`).join("")}</div>` : ""}
       </li>`
     )
     .join("");
+
+  paintProgress(s);
 
   const groups = [
     ["اسکیل‌ها", (s.skills || []).map((n) => pill(n, "skill"))],
@@ -373,6 +403,7 @@ async function router() {
     else a.removeAttribute("aria-current");
   });
 
+  if (r.view === "home") renderJourney();
   if (r.view === "services") renderServices();
   if (r.view === "library") renderLibrary();
   if (r.view === "install") renderInstall();
@@ -398,9 +429,9 @@ window.addEventListener("hashchange", router);
 document.addEventListener("click", (e) => {
   const copyEl = e.target.closest("[data-copy-text]");
   if (copyEl) {
-    copyText(copyEl.dataset.copyText);
-    if (copyEl.classList.contains("cmd__copy")) markDone(copyEl);
-    if (copyEl.classList.contains("prompt__copy")) markDone(copyEl);
+    copyText(copyEl.dataset.copyText).then((ok) => {
+      if (ok && (copyEl.classList.contains("cmd__copy") || copyEl.classList.contains("prompt__copy"))) markDone(copyEl);
+    });
     return;
   }
 
@@ -452,6 +483,17 @@ $("#copyAllPrompts")?.addEventListener("click", () => {
   copyText(text, "همهٔ پرامپت‌های این مسیر کپی شد ✓");
 });
 
+$("#favoritePlaybook")?.addEventListener("click", () => {
+  if (!state.current) return;
+  const p = progressFor(state.current.id); p.favorite = !p.favorite; saveProgress(state.current.id, p); paintProgress(state.current);
+});
+$("#pbSteps")?.addEventListener("change", (e) => {
+  const input = e.target.closest("input[data-step]"); if (!input || !state.current) return;
+  const i = Number(input.dataset.step), p = progressFor(state.current.id);
+  p.steps = p.steps.filter((n) => n !== i); if (input.checked) p.steps.push(i);
+  saveProgress(state.current.id, p); paintProgress(state.current);
+});
+
 $("#pbPrint")?.addEventListener("click", () => window.print());
 
 $("#surpriseBtn")?.addEventListener("click", () => {
@@ -467,6 +509,7 @@ const paletteInput = $("#paletteInput");
 const paletteList = $("#paletteList");
 let paletteIndex = 0;
 let paletteView = [];
+let paletteTrigger = null;
 
 function paletteItems() {
   const items = [];
@@ -498,13 +541,18 @@ function renderPalette() {
 }
 
 function openPalette() {
+  paletteTrigger = document.activeElement;
   palette.hidden = false;
   paletteInput.value = "";
   paletteIndex = 0;
   renderPalette();
   paletteInput.focus();
 }
-function closePalette() { palette.hidden = true; }
+function closePalette() {
+  palette.hidden = true;
+  if (paletteTrigger?.isConnected) paletteTrigger.focus();
+  paletteTrigger = null;
+}
 
 function runPalette(index) {
   const item = paletteView[index];
@@ -524,7 +572,7 @@ paletteList?.addEventListener("click", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "");
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "") || document.activeElement?.isContentEditable;
   if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) {
     e.preventDefault();
     palette.hidden ? openPalette() : closePalette();
@@ -532,6 +580,13 @@ document.addEventListener("keydown", (e) => {
   }
   if (palette.hidden) return;
   if (e.key === "Escape") return closePalette();
+  if (e.key === "Tab") {
+    const focusable = [paletteInput, ...$$("#paletteList button")];
+    const index = focusable.indexOf(document.activeElement);
+    if (e.shiftKey && index <= 0) { e.preventDefault(); focusable[focusable.length - 1].focus(); }
+    else if (!e.shiftKey && index === focusable.length - 1) { e.preventDefault(); focusable[0].focus(); }
+    return;
+  }
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
     e.preventDefault();
     const n = paletteView.length;
