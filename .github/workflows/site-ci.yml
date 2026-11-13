@@ -1,0 +1,45 @@
+name: Site CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Validate and test site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install dependencies
+        run: npm ci --prefix site
+      - name: Validate JavaScript, JSON and catalog references
+        run: |
+          set -euo pipefail
+          for f in site/assets/app.js site/assets/lazy.js site/assets/agent.js site/assets/workspace.js site/sw.js site/serve.mjs; do node --check "$f"; done
+          for f in site/assets/data.json site/assets/playbooks.json site/manifest.webmanifest; do node -e "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))" "$f"; done
+          node -e "
+            const data=require('./site/assets/data.json');
+            const {services}=require('./site/assets/playbooks.json');
+            const pools={skills:new Set(data.skills.map(x=>x.name)),commands:new Set(data.commands.map(x=>x.name)),agents:new Set(data.agents.map(x=>x.name))};
+            const missing=[];
+            for (const s of services) for (const k of ['skills','commands','agents']) for (const n of (s[k]||[])) if (!pools[k].has(n)) missing.push(k+':'+n+':'+s.id);
+            if (missing.length) { console.error('Unknown refs:', missing.join(', ')); process.exit(1); }
+            console.log('References OK:', services.length, 'services');
+          "
+      - name: Check generated account bundle
+        run: |
+          npm run build:workspace --prefix site
+          git diff --exit-code -- site/assets/workspace.js
+      - name: Test UI and local agent bridge
+        run: npm test --prefix site
