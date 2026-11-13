@@ -5,6 +5,9 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const fa = (n) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// Only redact source names in published editorial content; keep actual identifiers for copying.
+const cleanSource = (text) => String(text ?? "").replace(/Everything Claude Code/gi, "the toolkit").replace(/\bECC\b/gi, "کیت ابزار").replace(/https?:\/\/github\.com\/[^\s)]+/gi, "[نشانی منبع]");
+const toolLabel = (name) => String(name).replace(/ecc/gi, "toolkit");
 
 /* ── وضعیت ─────────────────────────────────────────── */
 const state = {
@@ -18,8 +21,11 @@ const state = {
   libOnlyMine: false,
   libCategory: "all",
   current: null,
+  entitled: false,
 };
 
+let sampleCatalog = null;
+let catalogRevision = 0;
 const ready = (async () => {
   const [dataRes, pbRes] = await Promise.all([
     fetch("assets/data.json", { cache: "no-cache" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
@@ -27,6 +33,7 @@ const ready = (async () => {
   ]);
   if (dataRes) state.data = dataRes;
   state.services = (pbRes && pbRes.services) || [];
+  sampleCatalog = {data: state.data, services: state.services};
   if (!state.data.skills.length || !state.services.length) throw new Error("کاتالوگ یا مسیرها بارگذاری نشد");
   buildIndexes();
   paintStaticBindings();
@@ -36,6 +43,7 @@ const skillSet = new Set();
 const commandSet = new Set();
 const agentSet = new Set();
 function buildIndexes() {
+  skillSet.clear(); commandSet.clear(); agentSet.clear();
   state.data.skills.forEach((s) => skillSet.add(s.name));
   state.data.commands.forEach((s) => commandSet.add(s.name));
   state.data.agents.forEach((s) => agentSet.add(s.name));
@@ -234,7 +242,7 @@ const pill = (name, kind, label) => {
   const display = kind === "command" ? `/${name}` : kind === "agent" ? name : name;
   return `<button class="pill pill--${kind}" type="button" data-copy-text="${esc(display)}"${
     known ? "" : ' data-missing="1" title="در کاتالوگ پیدا نشد"'
-  }>${esc(label || display)}</button>`;
+  }>${esc(toolLabel(label || display))}</button>`;
 };
 
 function renderPlaybook(id) {
@@ -242,6 +250,8 @@ function renderPlaybook(id) {
   if (!s) { location.hash = "#/services"; return; }
   state.current = s;
 
+  $("#pbPaywall").hidden = !s.sample;
+  $("#openBuilder").href = `#/builder/${encodeURIComponent(s.id)}`;
   $("#pbCrumb").textContent = s.title;
   $("#pbIcon").textContent = s.icon || "◆";
   $("#pbTitle").textContent = s.title;
@@ -267,8 +277,8 @@ function renderPlaybook(id) {
       (st, i) => `
       <li id="step-${i + 1}">
         <label class="step-check"><input type="checkbox" data-step="${i}" ${progressFor(s.id).steps.includes(i) ? "checked" : ""} /><span class="step-title">${esc(st.simpleTitle || st.t)}</span></label>
-        <details class="step-detail"><summary>توضیح فنی و ابزارهای پیشنهادی</summary><p>${esc(st.d)}</p></details>
-        ${st.cmds?.length ? `<div class="cmds">${st.cmds.map((c) => `<button type="button" class="cmd-chip" data-copy-text="${esc(String(c))}" title="کپی">${esc(c)}</button>`).join("")}</div>` : ""}
+        <details class="step-detail"><summary>توضیح فنی و ابزارهای پیشنهادی</summary><p>${esc(cleanSource(st.d))}</p></details>
+        ${st.cmds?.length ? `<div class="cmds">${st.cmds.map((c) => `<button type="button" class="cmd-chip" data-copy-text="${esc(String(c))}" title="کپی">${esc(toolLabel(c))}</button>`).join("")}</div>` : ""}
       </li>`
     )
     .join("");
@@ -301,7 +311,7 @@ function renderPlaybook(id) {
           <h3 class="prompt__title">${esc(p.title || `پرامپت ${fa(i + 1)}`)}</h3>
           <button class="prompt__copy" type="button" data-prompt="${i}" data-id="${esc(s.id)}" aria-label="کپی پرامپت">کپی</button>
         </div>
-        <pre class="prompt__body" tabindex="0">${esc(p.text)}</pre>
+        <pre class="prompt__body" tabindex="0">${esc(cleanSource(p.text))}</pre>
       </article>`
     )
     .join("");
@@ -327,6 +337,7 @@ function myNames(kind) {
 }
 
 function renderLibrary() {
+  $("#libraryPaywall").hidden = !state.services.some(s => s.sample);
   const list = LIB()[state.libKind] || [];
   const q = normalize(state.libQuery);
   const mine = state.libOnlyMine ? myNames(state.libKind) : null;
@@ -345,10 +356,10 @@ function renderLibrary() {
       (x) => `
     <li>
       <button class="lib__name" type="button" data-copy-text="${esc(state.libKind === "commands" ? "/" + x.name : x.name)}" title="کپی نام">
-        <span class="mark" aria-hidden="true">${state.libKind === "commands" ? "/" : state.libKind === "agents" ? "@" : "◇"}</span>${esc(x.name)}
+        <span class="mark" aria-hidden="true">${state.libKind === "commands" ? "/" : state.libKind === "agents" ? "@" : "◇"}</span>${esc(toolLabel(x.name))}
       </button>
       <p class="lib__desc">${(() => { const paths = state.services.filter(s => (s[state.libKind] || []).includes(x.name)); return paths.length ? `پیشنهاد شده برای: ${paths.map(p => `<a href="#/s/${esc(p.id)}">${esc(p.title)}</a>`).join("، ")}` : "هنوز به مسیری در این برنامه اضافه نشده است."; })()}</p>
-      <details class="original-desc"><summary>توضیح اصلی به زبان انگلیسی</summary><p dir="ltr">${esc((x.desc || "—").replace(/https?:\/\/github\.com\/[^\s)]+/gi, "[نشانی منبع]"))}</p></details>
+      <details class="original-desc"><summary>توضیح اصلی به زبان انگلیسی</summary><p dir="ltr">${esc(cleanSource(x.desc || "—"))}</p></details>
     </li>`
     )
     .join("");
@@ -359,9 +370,77 @@ function renderLibrary() {
     : "چیزی پیدا نشد — عبارت یا فیلتر دیگری امتحان کن.";
 }
 
+// The full catalog is supplied only by the authorized server RPC. Never persist it.
+window.addEventListener("studio:catalog", async (event) => {
+  const revision = ++catalogRevision;
+  await ready;
+  if (revision !== catalogRevision) return;
+  const payload = event.detail;
+  state.current = null; state.entitled = !!payload;
+  if (!payload) resetBuilder();
+  if (!payload) for (const selector of ['#pbSteps', '#pbPrompts', '#pbToolbox', '#pbPitfalls', '#pbDeliverable']) $(selector).replaceChildren();
+  state.data = payload?.catalog || sampleCatalog.data;
+  state.services = payload?.playbooks?.services || sampleCatalog.services;
+  buildIndexes(); paintStaticBindings();
+  palCache = null; paletteView = []; paletteList.replaceChildren(); if (!palette.hidden) closePalette();
+  renderPopular(); renderTagFilter(); renderServices(); renderLibrary();
+  await router();
+});
+
+/* ── ساخت درخواست: قالب محلی، نه فراخوانی مدل ────────── */
+const BUILDER_ROLES = {
+  general: "یک دستیار دقیق و کاربردی",
+  website: "یک متخصص طراحی و ساخت سایت",
+  webapp: "یک متخصص طراحی و ساخت برنامه",
+  writing: "یک نویسنده و ویراستار",
+  analysis: "یک تحلیل‌گر دقیق",
+  testing: "یک متخصص بررسی و آزمایش نرم‌افزار",
+};
+function setBuilderKind(kind) {
+  const aliases = {api:"webapp", mobile:"webapp", ai:"webapp", seo:"writing", data:"analysis", architecture:"analysis", security:"testing", performance:"testing"};
+  const resolved = aliases[kind] || kind;
+  $("#builderKind").value = Object.hasOwn(BUILDER_ROLES, resolved) ? resolved : "general";
+}
+function clearBuilderOutput() {
+  $("#builderOutput").textContent = "هنوز متنی ساخته نشده است.";
+  $("#builderCopy").disabled = true;
+  $("#builderStatus").textContent = "";
+}
+function resetBuilder() {
+  $("#builderForm").reset();
+  clearBuilderOutput();
+}
+$("#builderForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  if (!form.reportValidity()) return;
+  const task = $("#builderTask").value.trim();
+  if (!task) { $("#builderStatus").textContent = "لطفاً کاری را که می‌خواهید بنویسید."; $("#builderTask").focus(); return; }
+  const role = BUILDER_ROLES[$("#builderKind").value] || BUILDER_ROLES.general;
+  const fields = [
+    ["کاری که می‌خواهم", task],
+    ["زمینه و اطلاعات مهم", $("#builderContext").value.trim()],
+    ["شکل پاسخ مورد انتظار", $("#builderFormat").value.trim()],
+    ["محدودیت‌ها و نکته‌های مهم", $("#builderConstraints").value.trim()],
+    ["نمونهٔ دلخواه", $("#builderExample").value.trim()],
+  ];
+  const sections = fields.filter(([, value]) => value).map(([label, value]) => `${label}:\n${value}`);
+  const question = $("#builderAsk").checked ? "اگر اطلاعات لازم را نداری، ابتدا سؤال‌های ضروری را بپرس و چیزی را حدس نزن." : "اگر چیزی نامشخص است، آن را در پاسخ مشخص کن و از ساختن اطلاعات پرهیز کن.";
+  $("#builderOutput").textContent = [`در نقش ${role} کمکم کن.`, ...sections, question].join("\n\n");
+  $("#builderCopy").disabled = false;
+  $("#builderStatus").textContent = "متن آماده است؛ آن را کپی و در دستیار دلخواهت استفاده کن.";
+});
+$("#builderForm").addEventListener("reset", clearBuilderOutput);
+$("#builderForm").addEventListener("input", clearBuilderOutput);
+$("#builderForm").addEventListener("change", clearBuilderOutput);
+$("#builderCopy").addEventListener("click", async () => {
+  if (await copyText($("#builderOutput").textContent)) $("#builderStatus").textContent = "متن کپی شد.";
+  else $("#builderStatus").textContent = "کپی ممکن نشد؛ متن را انتخاب و دستی کپی کن.";
+});
+
 /* ── نصب ────────────────────────────────────────────── */
 function renderInstall() {
-  $("#harnessList").innerHTML = '<p>کیت گزیده برای پوشهٔ تنظیمات Claude آماده است. برای ابزارهای دیگر فایل‌ها را مطابق راهنمای همان ابزار به‌صورت دستی استفاده کنید.</p>';
+  $("#harnessList").innerHTML = '<p>کیت گزیده برای پوشهٔ تنظیمات دستیار کدنویسی آماده است. برای ابزارهای دیگر فایل‌ها را مطابق راهنمای همان ابزار به‌صورت دستی استفاده کنید.</p>';
   const cmds = [["پیش‌نمایش بدون تغییر فایل", "./kit/install-kit.sh --dry-run"], ["نصب کیت گزیده", "./kit/install-kit.sh"]];
   $("#installCmds").innerHTML = cmds.map(([label, cmd]) => `<div class="cmd-group"><span class="cmd-group__label">${esc(label)}</span><div class="cmd"><code>${esc(cmd)}</code><button class="cmd__copy" type="button" data-copy-text="${esc(cmd)}">کپی</button></div></div>`).join("");
 }
@@ -374,6 +453,7 @@ function parseRoute() {
   if (!seg.length) return { view: "home" };
   if (seg[0] === "services") return { view: "services" };
   if (seg[0] === "library") return { view: "library" };
+  if (seg[0] === "builder") return { view: "builder", type: seg[1] || "" };
   if (seg[0] === "install") return { view: "install" };
   if (seg[0] === "fcc") return { view: "fcc" };
   if (seg[0] === "plans") return { view: "plans" };
@@ -387,7 +467,8 @@ let firstRender = true;
 async function router() {
   await ready;
   const r = parseRoute();
-  $$(".view").forEach((v) => { v.hidden = v.dataset.view !== r.view; });
+  const locked = ["fcc", "install", "builder"].includes(r.view) && !state.entitled;
+  $$(".view").forEach((v) => { v.hidden = v.dataset.view !== (locked ? "paywall" : r.view); });
 
   $$("[data-nav]").forEach((a) => {
     const isActive = a.dataset.nav === r.view || (r.view === "playbook" && a.dataset.nav === "services");
@@ -401,6 +482,7 @@ async function router() {
   if (r.view === "library") renderLibrary();
   if (r.view === "install") renderInstall();
   if (r.view === "playbook") renderPlaybook(r.id);
+  if (r.view === "builder" && !locked && r.type) setBuilderKind(r.type);
 
   const bar = $("#routeProgress");
   bar.style.transform = "scaleX(1)";
@@ -439,7 +521,7 @@ document.addEventListener("click", (e) => {
   if (promptCopy) {
     const svc = state.services.find((x) => x.id === promptCopy.dataset.id);
     const p = svc?.prompts?.[Number(promptCopy.dataset.prompt)];
-    if (p) copyText(p.text).then((ok) => ok && markDone(promptCopy));
+    if (p) copyText(cleanSource(p.text)).then((ok) => ok && markDone(promptCopy));
     return;
   }
 
@@ -472,8 +554,8 @@ $("#libMore")?.addEventListener("click", () => { state.libLimit += 120; renderLi
 $("#copyAllPrompts")?.addEventListener("click", () => {
   const s = state.current;
   if (!s) return;
-  const text = `# ${s.title} — پرامپت‌های آماده (ECC Playbook)\n\n` +
-    s.prompts.map((p, i) => `### ${i + 1}) ${p.title}\n\n${p.text}`).join("\n\n---\n\n");
+  const text = `# ${s.title} — پرامپت‌های آماده\n\n` +
+    s.prompts.map((p, i) => `### ${i + 1}) ${p.title}\n\n${cleanSource(p.text)}`).join("\n\n---\n\n");
   copyText(text, "همهٔ پرامپت‌های این مسیر کپی شد ✓");
 });
 
@@ -507,10 +589,11 @@ let paletteTrigger = null;
 
 function paletteItems() {
   const items = [];
+  items.push({ type: "ابزار", label: "ساخت متن درخواست", desc: "درخواست شخصی خود را قدم به قدم بسازید", href: "#/builder" });
   state.services.forEach((s) => items.push({ type: "مسیر", label: s.title, desc: s.tagline || "", href: `#/s/${s.id}` }));
-  state.data.skills.forEach((s) => items.push({ type: "اسکیل", label: s.name, desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: s.name }));
-  state.data.commands.forEach((s) => items.push({ type: "دستور", label: "/" + s.name, desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: "/" + s.name }));
-  state.data.agents.forEach((s) => items.push({ type: "agent", label: "@" + s.name, desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: s.name }));
+  state.data.skills.forEach((s) => items.push({ type: "اسکیل", label: toolLabel(s.name), desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: s.name }));
+  state.data.commands.forEach((s) => items.push({ type: "دستور", label: "/" + toolLabel(s.name), desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: "/" + s.name }));
+  state.data.agents.forEach((s) => items.push({ type: "agent", label: "@" + toolLabel(s.name), desc: "نام ابزار را کپی کنید و برای بررسی کاربرد، دسته‌بندی کتابخانه را ببینید.", copy: s.name }));
   return items;
 }
 let palCache = null;
@@ -553,7 +636,7 @@ function runPalette(index) {
   if (!item) return;
   closePalette();
   if (item.href) location.hash = item.href;
-  else if (item.copy) copyText(item.copy, `کپی شد: ${item.copy}`);
+  else if (item.copy) copyText(item.copy, "نام ابزار کپی شد ✓");
 }
 
 $("#searchOpen")?.addEventListener("click", openPalette);
@@ -607,6 +690,10 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   try {
     await ready;
     $("#libCategory").insertAdjacentHTML("beforeend", state.services.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join(""));
+    if (window.studioCatalog?.catalog && window.studioCatalog?.playbooks?.services) {
+      state.data = window.studioCatalog.catalog; state.services = window.studioCatalog.playbooks.services; state.entitled = true;
+      buildIndexes(); paintStaticBindings();
+    }
     renderPopular();
     renderTagFilter();
     renderServices();

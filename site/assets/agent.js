@@ -14,12 +14,12 @@ async function api(path, options = {}) {
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || typeof data !== 'object') {
     const detail = data?.detail;
-    throw new Error(typeof detail === 'string' ? detail : 'اتصال به FCC ناموفق بود. وضعیت سرور محلی را بررسی کنید.');
+    throw new Error(typeof detail === 'string' ? detail : 'اتصال به سرور محلی ناموفق بود. وضعیت سرور محلی را بررسی کنید.');
   }
   return data;
 }
 function setStatus(text, kind = '') {
-  status.textContent = text;
+  status.textContent = String(text).replace(/\bFCC\b/gi, "سرور محلی");
   status.dataset.kind = kind;
 }
 function controls() {
@@ -55,12 +55,12 @@ async function bootstrap() {
     const data = await api('bootstrap'); epoch = data.epoch; available = data.available === true;
     connection.textContent = available ? 'متصل · محلی' : 'آماده نیست';
     connection.dataset.connected = String(available);
-    setStatus(available ? 'FCC آماده است. پوشه پروژه را وارد کنید یا یک جلسه را باز کنید.' : (data.message || 'FCC هنوز آماده نیست.'));
+    setStatus(available ? 'سرور محلی آماده است. پوشه پروژه را وارد کنید یا یک جلسه را باز کنید.' : 'سرور محلی هنوز آماده نیست.');
     controls();
     if (available) { await loadSessions(); if (session) await refresh(session.id, selectionGeneration); }
   } catch {
     available = false; clearTimeout(timer); connection.textContent = 'آفلاین'; connection.dataset.connected = 'false';
-    setStatus('اتصال محلی فعال نیست. FCC را اجرا کنید و سایت را با گزینه --fcc-local روی دستگاه خود راه‌اندازی کنید.', 'error');
+    setStatus('اتصال محلی فعال نیست. سرور محلی را اجرا کنید و سایت را با گزینه --fcc-local روی دستگاه خود راه‌اندازی کنید.', 'error');
     controls();
   } finally { $('#agentReconnect').disabled = false; }
 }
@@ -85,7 +85,7 @@ async function refresh(id, generation) {
     $('#agentSessionLabel').textContent = `${session.title || 'جلسه'} · ${session.cwd || ''}`;
     renderOutput(data.items);
     const labels = {ready:'آماده', preparing:'در حال آماده‌سازی', running:'در حال اجرا', stopping:'در حال توقف', completed:'تکمیل شده', interrupted:'متوقف شده', failed:'ناموفق'};
-    setStatus(`وضعیت جلسه: ${labels[run?.status || session.status] || run?.status || session.status}` + (data.prompts?.some(p => p.status === 'pending') ? ' · تأیید در Admin محلی FCC لازم است.' : '') + (run?.error ? ` · ${run.error}` : ''));
+    setStatus(`وضعیت جلسه: ${labels[run?.status || session.status] || run?.status || session.status}` + (data.prompts?.some(p => p.status === 'pending') ? ' · تأیید در پنل مدیریت محلی لازم است.' : '') + (run?.error ? ` · ${run.error}` : ''));
     controls();
     if (activeStatuses.has(run?.status)) timer = setTimeout(() => refresh(id, generation), 2000);
   } catch (e) { if (generation === selectionGeneration) { setStatus(`${e.message} برای تلاش دوباره «به‌روزرسانی» را بزنید.`, 'error'); controls(); } }
