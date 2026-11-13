@@ -49,54 +49,6 @@
             "Skill: frontend-design-direction"
           ],
           "simpleTitle": "هدف و مخاطب را مشخص کنید"
-        },
-        {
-          "t": "توکن‌های طراحی",
-          "d": "رنگ، تایپ، فاصله، شعاع و سایه را به design-tokens.json + CSS variables تبدیل کنید و DESIGN.md بنویسید تا صفحه دوم و سوم هم‌خانواده بمانند.",
-          "cmds": [
-            "Skill: design-system",
-            "/plan"
-          ],
-          "simpleTitle": "رنگ و ظاهر یکدست انتخاب کنید"
-        },
-        {
-          "t": "پیاده‌سازی",
-          "d": "با /plan به مراحل PR-سایز بشکنید و با /feature-dev اجرا کنید؛ استک (Next.js/Vite/Astro) را از ابتدا قفل کنید تا بعداً بازنویسی لازم نشود.",
-          "cmds": [
-            "/plan",
-            "/feature-dev",
-            "Skill: nextjs-turbopack  |  vite-patterns"
-          ],
-          "simpleTitle": "صفحه را بسازید"
-        },
-        {
-          "t": "پالایش بصری و حرکت",
-          "d": "فاصله‌ها، تایپوگرافی، حالت‌های hover/focus/empty و انیمیشن هدفمند را اضافه کنید — نه انیمیشن تزئینی.",
-          "cmds": [
-            "Skill: make-interfaces-feel-better",
-            "Skill: motion-patterns"
-          ],
-          "simpleTitle": "ظاهر و حرکت‌ها را بهتر کنید"
-        },
-        {
-          "t": "دسترسی‌پذیری + سئو",
-          "d": "کنتراست، فوکوس، لیبل فرم‌ها، ساختار heading، دادهٔ ساختاریافته و متا تگ‌ها را قبل از انتشار ببندید.",
-          "cmds": [
-            "Skill: accessibility",
-            "Skill: seo"
-          ],
-          "simpleTitle": "خوانایی و پیدا شدن در جست‌وجو را بررسی کنید"
-        },
-        {
-          "t": "بازبینی پیش از انتشار",
-          "d": "خطای کنسول، Core Web Vitals و مسیر کلیک‌ها را خودکار چک کنید؛ سپس بازبینی کد و گیت کیفیت.",
-          "cmds": [
-            "Skill: browser-qa",
-            "Skill: click-path-audit",
-            "/code-review",
-            "/quality-gate"
-          ],
-          "simpleTitle": "پیش از انتشار همه‌چیز را امتحان کنید"
         }
       ],
       "prompts": [
@@ -107,23 +59,11 @@
         {
           "title": "پرامپت ۲ — سیستم طراحی",
           "text": "با اسکیل design-system یک سیستم طراحی حداقلی برای این پروژه بساز:\n- پالت (حداکثر ۶ رنگ نقش‌محور + حالت تاریک)\n- مقیاس تایپوگرافی و وزن‌ها\n- مقیاس فاصله (۴/۸) و شعاع‌ها، سایه‌ها\n- یک کامپوننت نمونه (کارت + دکمه + فرم) که فقط از توکن‌ها استفاده کند\n\nخروجی: design-tokens.json، CSS custom properties، DESIGN.md با دلیل هر انتخاب، و یک صفحهٔ پیش‌نمایش HTML خودکفا. از default library styles استفاده نکن."
-        },
-        {
-          "title": "پرامپت ۳ — پیاده‌سازی صفحه",
-          "text": "حالا صفحهٔ اصلی {project} را با {stack} پیاده کن:\n- ساختار HTML معنایی، RTL کامل، بدون کتابخانهٔ UI سنگین\n- کامپوننت‌ها بر پایهٔ design-tokens؛ هیچ رنگ/فاصلهٔ hard-code\n- حالت‌های hover/focus/active/disabled/loading/empty/error\n- تصاویر با width/height مشخص و lazy-loading؛ فونت‌ها با font-display: swap\n- موبایل‌فرست، تا ۳۲۰px بدون سرریز افقی\n\nقبل از شروع، اسکیل frontend-patterns و rules/web/design-quality.md را رعایت کن. بعد از پیاده‌سازی، خودت یک بار /code-review روی دیف بزن."
-        },
-        {
-          "title": "پرامپت ۴ — پالایش و انتشار",
-          "text": "سه کار را انجام بده و گزارش بده:\n۱) بازبینی بصری با make-interfaces-feel-better: فاصله‌ها، ارتفاع خط، هم‌ترازی، سایه‌ها، اندازهٔ هدف لمسی (≥۴۴px)، wrap شدن متن‌ها.\n۲) audit دسترسی‌پذیری با accessibility: کنتراست AA، مسیر Tab، aria برای منو/مودال، لیبل فرم‌ها.\n۳) سئو با seo: title/description یکتا، Open Graph، canonical، structured data (Organization/Product)，sitemap و robots.\n\nسپس با browser-qa و click-path-audit انتشار را شبیه‌سازی کن و خطاهای کنسول و مسیرهای خراب را لیست کن."
         }
       ],
-      "pitfalls": [
-        "پریدن مستقیم به کد بدون جهت طراحی → نتیجهٔ شابلونی و بازنویسی گران.",
-        "استفاده از کامپوننت‌های آمادهٔ کتابخانه بدون بازطراحی → ظاهر پیش‌فرض و بی‌هویت.",
-        "فراموش کردن RTL و فونت‌های فارسی؛ ارتفاع خط فارسی با font-size لاتین تناسب ندارد.",
-        "سئو و دسترسی‌پذیری را به «بعد از انتشار» موکول نکردن — هزینهٔ اصلاح چند برابر است."
-      ],
-      "deliverable": "DESIGN.md + توکن‌ها + صفحهٔ پیاده‌شده + گزارش سه‌گانهٔ a11y/SEO/performance"
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "webapp",
@@ -142,116 +82,21 @@
         "skills": "react-patterns,frontend-patterns,dashboard-builder,contract-first,api-design,verification-loop"
       },
       "skills": [
-        "react-patterns",
         "frontend-patterns",
-        "react-performance",
-        "nextjs-turbopack",
-        "vue-patterns",
-        "dashboard-builder",
         "design-system",
-        "click-path-audit",
-        "e2e-testing",
-        "verification-loop"
+        "click-path-audit"
       ],
       "commands": [
-        "plan-prd",
         "plan",
-        "multi-frontend",
         "feature-dev",
-        "quality-gate",
-        "test-coverage",
-        "review-pr"
+        "quality-gate"
       ],
-      "agents": [
-        "planner",
-        "code-architect",
-        "react-reviewer",
-        "typescript-reviewer",
-        "pr-test-analyzer"
-      ],
-      "steps": [
-        {
-          "t": "PRD و مرزهای محصول",
-          "d": "با /plan-prd نیازها، نقش‌ها، جریان‌های اصلی و خارج از محدوده را بنویسید؛ این سند ورودی /plan و تست‌ها می‌شود.",
-          "cmds": [
-            "/plan-prd",
-            "/plan-canvas"
-          ],
-          "simpleTitle": "نیازها و کاربران را مشخص کنید"
-        },
-        {
-          "t": "قرارداد داده",
-          "d": "شکل API/نوع‌ها را قبل از UI قفل کنید (OpenAPI/JSON Schema/Zod) تا فرانت و بک‌اند از هم دور نشوند.",
-          "cmds": [
-            "Skill: contract-first",
-            "Skill: api-design"
-          ],
-          "simpleTitle": "شکل اطلاعات و ارتباط‌ها را تعیین کنید"
-        },
-        {
-          "t": "اسکلت اپ",
-          "d": "مسیرها، لایهٔ داده (TanStack Query)، احراز هویت، مدیریت خطا و حالت‌های loading/empty را یک‌جا بسازید.",
-          "cmds": [
-            "Skill: react-patterns",
-            "/multi-frontend"
-          ],
-          "simpleTitle": "بخش‌های پایه برنامه را بسازید"
-        },
-        {
-          "t": "صفحه‌ها و جدول‌ها",
-          "d": "صفحه‌بندی، فیلتر، مرتب‌سازی و نقش‌ها را با data model یکی نگه دارید؛ جدول‌های بزرگ را مجازی‌سازی کنید.",
-          "cmds": [
-            "Skill: frontend-patterns",
-            "Skill: react-performance"
-          ],
-          "simpleTitle": "صفحه‌ها و جدول‌ها را تکمیل کنید"
-        },
-        {
-          "t": "تست جریان",
-          "d": "مسیرهای بحرانی (ورود، پرداخت، ذخیره) را E2E کنید؛ کامپوننت‌های پیچیده را با React Testing Library.",
-          "cmds": [
-            "Skill: e2e-testing",
-            "Skill: react-testing",
-            "/test-coverage"
-          ],
-          "simpleTitle": "کارهای مهم کاربر را امتحان کنید"
-        },
-        {
-          "t": "بازبینی و گیت",
-          "d": "بازبینی تخصصی React/TS + بررسی پوشش تست + گیت کیفیت قبل از merge.",
-          "cmds": [
-            "/react-review",
-            "/quality-gate",
-            "/review-pr"
-          ],
-          "simpleTitle": "کیفیت برنامه را بررسی کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — PRD کوتاه",
-          "text": "با /plan-prd یک PRD کوتاه برای {project} بنویس:\n- مسئله و کاربر هدف\n- ۳ جریان اصلی (happy path) + حالت‌های خطا\n- نقش‌ها و مجوزها (RBAC)\n- مدل دادهٔ اولیه (موجودیت‌ها و رابطه‌ها)\n- معیار پذیرش هر جریان به شکل «قابل تست»\n- خارج از محدودهٔ نسخهٔ اول\n\nهیچ کدی ننویس. خروجی باید در docs/ ذخیره شود و ورودی /plan باشد."
-        },
-        {
-          "title": "پرامپت ۲ — قرارداد و لایهٔ داده",
-          "text": "برای {project} با {stack}:\n۱) قرارداد API را به‌صورت OpenAPI/Zod تعریف کن (مسیرها، پارامترها، پاسخ خطا، صفحه‌بندی).\n۲) نوع‌های TypeScript را از همان قرارداد تولید کن؛ هیچ نوع دستی موازی نساز.\n۳) لایهٔ دسترسی داده را با TanStack Query بساز: کلیدهای query، invalidate، حالت خطا و retry.\n۴) قواعد اسکیل contract-first و api-design را رعایت کن و تفاوت‌ها را گزارش بده."
-        },
-        {
-          "title": "پرامپت ۳ — پیاده‌سازی صفحهٔ داشبورد",
-          "text": "یک داشبورد برای {project} بساز:\n- کارت‌های KPI با تعریف دقیق متریک و منبع داده\n- یک نمودار روند و یک جدول قابل فیلتر (صفحه‌بندی سمت سرور)\n- اسکلت بارگذاری، حالت خالی با CTA، و حالت خطا با retry\n- فیلترهای قابل اشتراک در URL\n\nاسکیل‌های dashboard-builder و react-patterns را رعایت کن. هر متریک باید به یک کوئری مشخص نگاشت شود؛ داشبورد vanity نساز."
-        },
-        {
-          "title": "پرامپت ۴ — گیت کیفیت پیش از merge",
-          "text": "برای این PR:\n1) /react-review و /test-coverage را اجرا کن و یافته‌ها را بر اساس شدت مرتب کن.\n2) مسیرهای بحرانی را با Playwright پوشش بده (ورود، ایجاد رکورد، خروجی گرفتن).\n3) /quality-gate را اجرا کن؛ اگر fail شد، فقط ایرادهای مسدودکننده را اصلاح کن و دوباره اجرا کن.\n4) در پایان یک خلاصهٔ ۵ خطی از ریسک‌های باقی‌مانده بده."
-        }
-      ],
-      "pitfalls": [
-        "قرارداد API شفاهی/ذهنی → بازنویسی فرانت هنگام تغییر بک‌اند.",
-        "state سرور و کلاینت قاطی → باگ‌های همگام‌سازی و رندرهای اضافه.",
-        "داشبورد با متریک‌های تعریف‌نشده → اعداد درست، تصمیم غلط.",
-        "تست فقط روی «رندر می‌شود» به‌جای «جریان کار می‌کند»."
-      ],
-      "deliverable": "PRD + قرارداد API تایپ‌دار + داشبورد + پوشش E2E جریان‌های بحرانی"
+      "agents": [],
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "api",
@@ -268,101 +113,21 @@
         "profile": "developer",
         "skills": "api-design,backend-patterns,postgres-patterns,security-review,verification-loop"
       },
-      "skills": [
-        "api-design",
-        "backend-patterns",
-        "contract-first",
-        "nestjs-patterns",
-        "fastapi-patterns",
-        "django-patterns",
-        "springboot-patterns",
-        "laravel-patterns",
-        "rails-patterns",
-        "golang-patterns",
-        "error-handling",
-        "security-review"
-      ],
+      "skills": [],
       "commands": [
         "plan",
         "feature-dev",
-        "code-review",
-        "security-scan",
-        "test-coverage"
+        "code-review"
       ],
       "agents": [
         "architect",
-        "code-reviewer",
-        "security-reviewer",
-        "database-reviewer"
+        "code-reviewer"
       ],
-      "steps": [
-        {
-          "t": "طراحی قرارداد",
-          "d": "نام منابع، کدهای وضعیت، شکل خطا، صفحه‌بندی و نسخه‌بندی را قبل از کد بنویسید.",
-          "cmds": [
-            "Skill: api-design",
-            "Skill: contract-first"
-          ],
-          "simpleTitle": "ارتباط‌ها و اطلاعات را مشخص کنید"
-        },
-        {
-          "t": "لایه‌بندی",
-          "d": "controller → service → repository با مرزهای روشن؛ منطق دامنه نباید به ORM وابسته باشد.",
-          "cmds": [
-            "Skill: backend-patterns",
-            "Skill: hexagonal-architecture"
-          ],
-          "simpleTitle": "کارها را به بخش‌های جدا تقسیم کنید"
-        },
-        {
-          "t": "اعتبارسنجی و خطا",
-          "d": "ورودی را در مرز سیستم اعتبارسنجی کنید و خطاها را با کد/پیام پایدار برگردانید — نه stack trace.",
-          "cmds": [
-            "Skill: error-handling",
-            "Skill: security-review"
-          ],
-          "simpleTitle": "درستی ورودی‌ها و خطاها را بررسی کنید"
-        },
-        {
-          "t": "کارایی داده",
-          "d": "N+1، ایندکس‌های لازم، اتصال pool و کش را اندازه بگیرید؛ نه حدس.",
-          "cmds": [
-            "Skill: postgres-patterns",
-            "Skill: redis-patterns"
-          ],
-          "simpleTitle": "سرعت کار با داده را بهتر کنید"
-        },
-        {
-          "t": "تست و اسکن",
-          "d": "قرارداد را با تست‌های یکپارچه قفل کنید و اسکن امنیتی/وابستگی را اجرا کنید.",
-          "cmds": [
-            "/test-coverage",
-            "/security-scan"
-          ],
-          "simpleTitle": "برنامه و امنیت را آزمایش کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — طراحی API",
-          "text": "برای {project} یک API با {stack} طراحی کن. خروجی:\n- فهرست منابع با نام جمع و مسیرهای CRUD + اکشن‌های غیر CRUD\n- کدهای وضعیت و شکل استاندارد خطا (code/message/details/requestId)\n- صفحه‌بندی cursor-based برای لیست‌ها، فیلترها و مرتب‌سازی\n- idempotency برای عملیات نوشتنی حساس\n- نسخه‌بندی و راهبرد تغییر شکننده\n\nقواعد اسکیل api-design را رعایت کن؛ سپس به OpenAPI تبدیل کن و مشخص کن کدام تصمیم نیاز به ADR دارد."
-        },
-        {
-          "title": "پرامپت ۲ — پیاده‌سازی لایه‌ها",
-          "text": "اسکلت سرویس {project} را با مرزهای روشن بساز: controller (HTTP)، service (use case)، repository (داده)، و دامنهٔ بدون وابستگی به فریمورک.\nالزامات: اعتبارسنجی ورودی در مرز، خطاهای دامنه‌ای مشخص، لاگ ساختاریافته با requestId، و تست واحد برای service بدون دیتابیس واقعی.\nاسکیل backend-patterns و hexagonal-architecture را رعایت کن و هر انحراف را توضیح بده."
-        },
-        {
-          "title": "پرامپت ۳ — بازبینی و سخت‌سازی",
-          "text": "این سرویس را بازبینی کن و یافته‌ها را بر اساس شدت (blocker/major/minor) بده:\n۱) امنیت: تزریق، احراز هویت/مجوز، نشت داده در خطا و لاگ، نرخ‌محدودسازی\n۲) کارایی: کوئری‌های N+1، ایندکس، سریال‌سازی و اندازهٔ پاسخ\n۳) قابلیت اعتماد: retry، timeout، تراکنش و سازگاری\n۴) تست: شکاف‌های پوشش در مسیرهای خطا\n\nسپس با security-scan اسکن بده و برای هر blocker یک پچ پیشنهادی کوچک ارائه کن."
-        }
-      ],
-      "pitfalls": [
-        "بازگرداندن موجودیت دیتابیس به‌صورت خام → نشت فیلدهای حساس و شکستن قرارداد.",
-        "صفحه‌بندی offset روی جدول بزرگ → کندی تدریجی و پرش ردیف‌ها.",
-        "مجوز فقط در UI → دسترسی مستقیم به endpoint باز.",
-        "لاگ کردن payload کامل درخواست‌ها → نشت PII و رمز."
-      ],
-      "deliverable": "OpenAPI + سرویس لایه‌بندی‌شده + تست قرارداد + گزارش امنیت/کارایی"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "architecture",
@@ -379,96 +144,19 @@
         "profile": "developer",
         "skills": "architecture-decision-records,hexagonal-architecture,blueprint,codebase-onboarding"
       },
-      "skills": [
-        "architecture-decision-records",
-        "hexagonal-architecture",
-        "blueprint",
-        "codebase-onboarding",
-        "code-tour",
-        "coding-standards",
-        "error-handling",
-        "latency-critical-systems"
-      ],
+      "skills": [],
       "commands": [
         "plan",
-        "evolve",
-        "refactor-clean",
-        "update-codemaps",
         "code-review"
       ],
       "agents": [
-        "architect",
-        "code-architect",
-        "code-explorer",
-        "spec-miner",
-        "refactor-cleaner"
+        "architect"
       ],
-      "steps": [
-        {
-          "t": "نقشهٔ وضعیت",
-          "d": "با codebase-onboarding و code-explorer ساختار، نقاط ورود و وابستگی‌ها را نقشه کنید.",
-          "cmds": [
-            "/update-codemaps",
-            "Agent: code-explorer"
-          ],
-          "simpleTitle": "وضعیت فعلی را بشناسید"
-        },
-        {
-          "t": "تشخیص مرزها",
-          "d": "جاهایی که منطق دامنه با I/O قاطی شده را فهرست کنید؛ این نقاط کاندیدای Ports & Adapters هستند.",
-          "cmds": [
-            "Skill: hexagonal-architecture"
-          ],
-          "simpleTitle": "مرز میان بخش‌ها را مشخص کنید"
-        },
-        {
-          "t": "ثبت تصمیم",
-          "d": "هر انتخاب مهم (فریمورک، دیتابیس، الگو) را ADR کنید تا «چرا» فراموش نشود.",
-          "cmds": [
-            "Skill: architecture-decision-records"
-          ],
-          "simpleTitle": "دلیل انتخاب‌ها را بنویسید"
-        },
-        {
-          "t": "برنامهٔ اجرا",
-          "d": "با blueprint به مراحل PR-سایز با گراف وابستگی و معیار خروج بشکنید.",
-          "cmds": [
-            "Skill: blueprint",
-            "/plan"
-          ],
-          "simpleTitle": "برای تغییرها برنامه بریزید"
-        },
-        {
-          "t": "مهاجرت مرحله‌ای",
-          "d": "expand/contract: کد جدید کنار قدیم، سوییچ، سپس حذف. هر مرحله قابل برگشت.",
-          "cmds": [
-            "/refactor-clean",
-            "Skill: database-migrations"
-          ],
-          "simpleTitle": "تغییرها را قدم به قدم انجام دهید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — ارزیابی معماری فعلی",
-          "text": "این کدبیس را بررسی کن و یک نقشهٔ معماری بده:\n- مؤلفه‌ها و مسئولیت هرکدام، نقاط ورود\n- جهت وابستگی‌ها و چرخه‌های وابستگی\n- نقاطی که منطق دامنه به فریمورک/دیتابیس/HTTP گره خورده\n- سه ریسک پرهزینه در ۶ ماه آینده\n\nخروجی: یک جدول + نمودار متنی. سپس ۳ گزینهٔ بهبود با هزینه/فایده پیشنهاد بده (بدون تغییر کد)."
-        },
-        {
-          "title": "پرامپت ۲ — ADR برای انتخاب فنی",
-          "text": "تصمیم: انتخاب {stack} برای {project}.\nبا اسکیل architecture-decision-records یک ADR بنویس با بخش‌های: زمینه، محدودیت‌ها، گزینه‌های بررسی‌شده (حداقل ۳)، معیارهای مقایسه، تصمیم، پیامدها (مثبت/منفی)، و شرط بازبینی مجدد.\n\nگزینه‌ها را واقع‌بینانه مقایسه کن؛ اگر داده یا بنچمارک لازم است، آن را صریح به‌عنوان فرض علامت بزن. شمارهٔ بعدی ADR را از docs/adr/ بخوان."
-        },
-        {
-          "title": "پرامپت ۳ — ریفکتور به Ports & Adapters",
-          "text": "این بخش از کد را به معماری هگزاگونال منتقل کن:\n۱) use caseها را استخراج کن و دامنه را از فریمورک جدا کن.\n۲) برای هر وابستگی بیرونی یک port تعریف کن و آداپتر موجود را پشت آن ببر.\n۳) تست‌ها را با fake adapter بازنویسی کن (بدون شبکه/دیتابیس).\n۴) مهاجرت را مرحله‌ای و قابل‌برگشت انجام بده؛ در هر مرحله بیلد و تست سبز بماند.\n\nقبل از شروع، برنامهٔ مراحل و ریسک‌ها را نشان بده."
-        }
-      ],
-      "pitfalls": [
-        "ریفکتور «همه‌چیز یک‌جا» بدون گیت تست → شکستن رفتار و بازگشت ناپذیر.",
-        "انتخاب فنی بر پایهٔ محبوبیت، بدون ADR و بدون معیار بازبینی.",
-        "انتزاع زودهنگام: هر ماژول یک interface بگیرد → پیچیدگی بی‌فایده.",
-        "مهاجرت دیتابیس بدون مسیر بازگشت."
-      ],
-      "deliverable": "نقشهٔ معماری + ADR + برنامهٔ مهاجرت مرحله‌ای + تست‌های سبز در هر مرحله"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "mobile",
@@ -486,100 +174,23 @@
         "skills": "react-native-patterns,dart-flutter-patterns,swiftui-patterns,kotlin-patterns,accessibility"
       },
       "skills": [
-        "react-native-patterns",
-        "dart-flutter-patterns",
-        "swiftui-patterns",
-        "kotlin-patterns",
-        "kotlin-coroutines-flows",
-        "compose-multiplatform-patterns",
-        "android-clean-architecture",
         "accessibility",
-        "design-system",
-        "e2e-testing"
+        "design-system"
       ],
       "commands": [
         "plan",
         "feature-dev",
-        "build-fix",
-        "flutter-build",
-        "kotlin-build",
-        "flutter-test",
-        "kotlin-test",
-        "flutter-review",
         "code-review"
       ],
       "agents": [
         "architect",
-        "flutter-reviewer",
-        "kotlin-reviewer",
-        "swift-reviewer",
-        "dart-build-resolver",
-        "kotlin-build-resolver",
-        "swift-build-resolver",
         "a11y-architect"
       ],
-      "steps": [
-        {
-          "t": "انتخاب پشته",
-          "d": "بر پایهٔ تیم، پرفورمنس لازم و دسترسی به APIهای نیتیو انتخاب کنید — و آن را ADR کنید.",
-          "cmds": [
-            "Skill: architecture-decision-records"
-          ],
-          "simpleTitle": "ابزار ساخت را انتخاب کنید"
-        },
-        {
-          "t": "اسکلت و ناوبری",
-          "d": "ناوبری، تم، لایهٔ داده و مدیریت state را قبل از صفحه‌ها بچینید.",
-          "cmds": [
-            "Skill: react-native-patterns  |  dart-flutter-patterns"
-          ],
-          "simpleTitle": "صفحه‌ها و جابه‌جایی را بسازید"
-        },
-        {
-          "t": "دسترسی‌پذیری نیتیو",
-          "d": "traits/labels، اندازهٔ هدف لمسی، حرکات صفحه‌خوان و پشتیبانی از فونت بزرگ.",
-          "cmds": [
-            "Skill: accessibility"
-          ],
-          "simpleTitle": "خوانایی و دسترسی را بررسی کنید"
-        },
-        {
-          "t": "رفع خطاهای بیلد",
-          "d": "خطاهای Gradle/Xcode/Dart را با agentهای اختصاصی رفع کنید، نه با تغییر تصادفی نسخه.",
-          "cmds": [
-            "/build-fix",
-            "/flutter-build",
-            "/kotlin-build"
-          ],
-          "simpleTitle": "خطاهای ساخت را برطرف کنید"
-        },
-        {
-          "t": "تست و انتشار",
-          "d": "تست ویجت/UI، تست روی دستگاه واقعی، و چک‌لیست انتشار استور.",
-          "cmds": [
-            "Skill: e2e-testing",
-            "/flutter-test",
-            "/kotlin-test"
-          ],
-          "simpleTitle": "برنامه را آزمایش و آماده انتشار کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — انتخاب پشته و اسکلت",
-          "text": "می‌خواهم اپ {project} را برای iOS و Android بسازم. تیم من با {stack} راحت‌تر است.\n۱) سه گزینهٔ پشته را با معیار: سرعت تحویل، کیفیت UI نیتیو، دسترسی به APIهای بومی، هزینهٔ نگهداری مقایسه کن و یکی را پیشنهاد بده (با ADR).\n۲) ساختار پوشه‌ها و لایه‌ها را برای همان پشته بچین.\n۳) ناوبری، تم (توکن‌محور)، و لایهٔ داده را اسکلت کن.\n۴) مشخص کن چه چیزی باید نیتیو بماند."
-        },
-        {
-          "title": "پرامپت ۲ — صفحه و دسترسی‌پذیری",
-          "text": "صفحهٔ {project} را پیاده کن با: ناوبری، حالت خالی/خطا، اسکلت بارگذاری، و پشتیبانی از تم تاریک.\nالزامات دسترسی‌پذیری: label و hint برای هر کنترل، اندازهٔ هدف لمسی ≥ ۴۴pt، ترتیب فوکوس منطقی، پشتیبانی از dynamic type، و کنتراست AA.\nسپس با اسکیل accessibility خودت یک بازبینی بده و ایرادها را اصلاح کن."
-        }
-      ],
-      "pitfalls": [
-        "تست فقط روی شبیه‌ساز با داده‌های تمیز → کرش در دستگاه واقعی.",
-        "قفل شدن به یک کتابخانهٔ UI سنگین → کندی و ناهمخوانی با نسخهٔ OS.",
-        "نادیده گرفتن حالت‌های شبکهٔ ضعیف و آفلاین."
-      ],
-      "deliverable": "اسکلت اپ + صفحات کلیدی + تست UI + چک‌لیست انتشار"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "ai",
@@ -597,112 +208,20 @@
         "skills": "mcp-server-patterns,agent-harness-construction,cost-aware-llm-pipeline,agent-security-hardening,agent-eval"
       },
       "skills": [
-        "mcp-server-patterns",
         "agent-harness-construction",
-        "agentic-engineering",
         "agent-architecture-audit",
-        "agent-eval",
-        "cost-aware-llm-pipeline",
-        "prompt-caching-strategy",
-        "agent-security-hardening",
-        "iterative-retrieval",
-        "eval-harness",
-        "continuous-learning-v2",
-        "unified-memory"
+        "agent-eval"
       ],
       "commands": [
         "plan",
-        "harness-audit",
-        "learn",
-        "instinct-status",
-        "skill-create",
         "code-review"
       ],
-      "agents": [
-        "agent-evaluator",
-        "harness-optimizer",
-        "loop-operator",
-        "security-reviewer",
-        "docs-lookup"
-      ],
-      "steps": [
-        {
-          "t": "تعریف کار و معیار موفقیت",
-          "d": "قبل از انتخاب مدل: چه ورودی، چه خروجی، چه دقت لازم و چه بودجه‌ای. معیار بدون عدد = پروژهٔ بی‌پایان.",
-          "cmds": [
-            "Skill: agentic-engineering",
-            "/plan"
-          ],
-          "simpleTitle": "وظیفه و نتیجه مطلوب را مشخص کنید"
-        },
-        {
-          "t": "طراحی ابزارها",
-          "d": "ابزارها را کوچک، تک‌منظوره و با توضیح دقیق بسازید؛ خروجی ابزار بخشی از پرامپت است.",
-          "cmds": [
-            "Skill: agent-harness-construction",
-            "Skill: mcp-server-patterns"
-          ],
-          "simpleTitle": "ابزارهای لازم دستیار را انتخاب کنید"
-        },
-        {
-          "t": "زمین‌سازی (RAG)",
-          "d": "تکه‌بندی، embedding و بازیابی را جدا ارزیابی کنید؛ کیفیت بازیابی سقف کیفیت پاسخ است.",
-          "cmds": [
-            "Skill: iterative-retrieval",
-            "Skill: rag-pipeline-* "
-          ],
-          "simpleTitle": "منابع اطلاعات را آماده کنید"
-        },
-        {
-          "t": "حافظه و هزینه",
-          "d": "کش پرامپت، مسیریابی مدل و بودجهٔ توکن؛ خروجی‌های تکراری را ذخیره کنید.",
-          "cmds": [
-            "Skill: cost-aware-llm-pipeline",
-            "Skill: prompt-caching-strategy"
-          ],
-          "simpleTitle": "حافظه و هزینه را بررسی کنید"
-        },
-        {
-          "t": "سخت‌سازی امنیتی",
-          "d": "ورودی غیرقابل‌اعتماد، تزریق پرامپت، دسترسی ابزار و نشتی داده را ببندید.",
-          "cmds": [
-            "Skill: agent-security-hardening",
-            "/harness-audit"
-          ],
-          "simpleTitle": "دسترسی‌ها را امن کنید"
-        },
-        {
-          "t": "ارزیابی و یادگیری",
-          "d": "با eval-harness مجموعهٔ تست بسازید و هر تغییر را با همان مجموعه بسنجید.",
-          "cmds": [
-            "Skill: agent-eval",
-            "Skill: eval-harness",
-            "/learn"
-          ],
-          "simpleTitle": "پاسخ‌ها را آزمایش و بهتر کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — تعریف و معیار",
-          "text": "می‌خواهم یک ایجنت برای {project} بسازم.\n۱) ۵ سناریوی واقعی کاربر را بنویس (ورودی + خروجی مطلوب + معیار پذیرش عددی).\n۲) مشخص کن چه بخشی باید قطعی (کد) باشد و چه بخشی مدل‌محور.\n۳) سقف بودجه: توکن و هزینهٔ هر اجرا، و نرخ خطای قابل‌قبول.\n۴) ریسک‌های امنیتی و داده را فهرست کن (ورودی غیرقابل‌اعتماد، ابزارهای نوشتنی، دادهٔ حساس).\n\nخروجی را در docs/ ذخیره کن و به /plan بده."
-        },
-        {
-          "title": "پرامپت ۲ — ابزارها و هارنس",
-          "text": "با اسکیل agent-harness-construction این ایجنت را طراحی کن:\n- فهرست ابزارها با نام، توضیح یک‌خطی، پارامترها، و مثال خروجی\n- قاعدهٔ انتخاب ابزار و رفتار در صورت شکست (retry/fallback/escalate)\n- قالب خروجی قابل‌تجزیه (JSON با اسکیمای مشخص)\n- محدودیت‌ها: حداکثر گام، حداکثر طول خروجی، و شرط توقف\n\nبرای هر ابزار بگو چرا لازم است و اگر حذف شود چه اتفاقی می‌افتد."
-        },
-        {
-          "title": "پرامپت ۳ — ارزیابی و هزینه",
-          "text": "یک هارنس ارزیابی برای {project} بساز:\n- ۲۰ مورد تست از سناریوهای واقعی + ۵ مورد دشوار/مرزی\n- سنجه‌ها: صحت، کامل بودن، نرخ امتناع، تأخیر p95، توکن/هزینهٔ هر اجرا\n- اجرای تکرارپذیر با ثبت نسخهٔ پرامپت و مدل\n- گزارش رگرسیون بین دو نسخه\n\nسپس مسیرهای کاهش هزینه را با اسکیل cost-aware-llm-pipeline پیشنهاد بده (مسیریابی مدل، کش، کوتاه‌سازی context)."
-        }
-      ],
-      "pitfalls": [
-        "تغییر پرامپت بدون مجموعهٔ ارزیابی → «بهتر شد؟» قابل پاسخ نیست.",
-        "ابزارهای بیش‌ازحد عمومی → مدل نمی‌داند کدام را انتخاب کند.",
-        "اعتماد به خروجی مدل برای عملیات نوشتنی بدون تأیید/محدوده.",
-        "نادیده گرفتن هزینهٔ context انباشته در حلقه‌های طولانی."
-      ],
-      "deliverable": "طراحی هارنس + مجموعهٔ eval + گزارش هزینه + چک‌لیست امنیت"
+      "agents": [],
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "testing",
@@ -718,100 +237,19 @@
         "profile": "developer",
         "skills": "tdd-workflow,react-testing,e2e-testing,verification-loop,test-collaboration"
       },
-      "skills": [
-        "tdd-workflow",
-        "react-testing",
-        "e2e-testing",
-        "python-testing",
-        "golang-testing",
-        "rust-testing",
-        "cpp-testing",
-        "csharp-testing",
-        "verification-loop",
-        "test-collaboration",
-        "codehealth-mcp",
-        "ai-regression-testing"
-      ],
+      "skills": [],
       "commands": [
-        "test-coverage",
         "quality-gate",
-        "code-review",
-        "review-pr",
-        "build-fix"
+        "code-review"
       ],
       "agents": [
-        "tdd-guide",
-        "e2e-runner",
-        "pr-test-analyzer",
-        "code-reviewer",
-        "silent-failure-hunter"
+        "code-reviewer"
       ],
-      "steps": [
-        {
-          "t": "انتخاب مرز تست",
-          "d": "کدام رفتار حتماً تست شود (پول، دسترسی، داده) و کدام نه؛ تست شکننده بدتر از بی‌تست است.",
-          "cmds": [
-            "Skill: test-collaboration"
-          ],
-          "simpleTitle": "بخش‌های مهم برای آزمون را انتخاب کنید"
-        },
-        {
-          "t": "TDD برای واحدها",
-          "d": "تست قرمز → کوچک‌ترین تغییر سبز → ریفکتور؛ برای هر باگ اول تست بازتولید.",
-          "cmds": [
-            "Skill: tdd-workflow",
-            "Agent: tdd-guide"
-          ],
-          "simpleTitle": "بخش‌های کوچک را آزمایش کنید"
-        },
-        {
-          "t": "تست کامپوننت",
-          "d": "RTL/Vitest با MSW؛ assertion روی رفتار کاربر و نقش‌های ARIA، نه جزئیات پیاده‌سازی.",
-          "cmds": [
-            "Skill: react-testing"
-          ],
-          "simpleTitle": "اجزای صفحه را بررسی کنید"
-        },
-        {
-          "t": "E2E برای جریان‌ها",
-          "d": "Page Object Model، دادهٔ ایزوله و اجرای پایدار در CI؛ فقط مسیرهای پرهزینه.",
-          "cmds": [
-            "Skill: e2e-testing",
-            "/test-coverage"
-          ],
-          "simpleTitle": "کارهای کامل کاربر را امتحان کنید"
-        },
-        {
-          "t": "گیت کیفیت",
-          "d": "بیلد، تایپ‌چک، لینت، پوشش و بازبینی دیف — همه با هم و به‌صورت خودکار.",
-          "cmds": [
-            "/quality-gate",
-            "Skill: verification-loop"
-          ],
-          "simpleTitle": "نتیجه‌ها را پیش از انتشار مرور کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — برنامهٔ تست",
-          "text": "برای {project} یک برنامهٔ تست بنویس:\n- فهرست رفتارهای بحرانی (با دلیل: ریسک پول/داده/دسترسی)\n- برای هر رفتار: سطح (unit/component/integration/E2E) و دلیل انتخاب\n- داده‌های تست لازم و نحوهٔ ایزوله‌سازی\n- معیار پوشش واقع‌بینانه (نه ۱۰۰٪ کورکورانه)\n- تست‌هایی که آگاهانه نمی‌نویسیم و چرا\n\nسپس ترتیب اجرا را طوری بچین که زودترین بازخورد اول بیاید."
-        },
-        {
-          "title": "پرامپت ۲ — TDD برای یک قابلیت",
-          "text": "قابلیت «{project}» را با TDD پیاده کن:\n۱) تست‌های قرمز را بنویس و اجرا کن؛ خروجی شکست را نشان بده.\n۲) کوچک‌ترین تغییر برای سبز شدن را بده — بدون اضافه‌کاری.\n۳) ریفکتور کن و همهٔ تست‌ها را دوباره اجرا کن.\n۴) در پایان: فهرست تست‌ها، پوشش، و مواردی که هنوز پوشش ندارند.\n\nقواعد اسکیل tdd-workflow را رعایت کن؛ اگر تستی مبهم است، اول سؤال بپرس."
-        },
-        {
-          "title": "پرامپت ۳ — شکار خطاهای خاموش",
-          "text": "این دیف/ماژول را بررسی کن و بگو کجا خطاها خاموش می‌شوند:\n- catchهای خالی، fallbackهای بی‌صدا، Promise بدون await، retry بی‌پایان\n- لاگ‌هایی که خطا را به warn تبدیل می‌کنند\n- تست‌هایی که همیشه پاس می‌شوند (assertion بی‌اثر)\n\nبرای هر مورد: مسیر وقوع، اثر کاربری، و پچ حداقلی.اسکیل silent-failure-hunter را رعایت کن."
-        }
-      ],
-      "pitfalls": [
-        "تست روی جزئیات پیاده‌سازی → هر ریفکتور، ده تست شکسته.",
-        "پوشش عددی بدون تست رفتار مهم.",
-        "E2E برای همه‌چیز → اجرای کند و شکننده.",
-        "mock کردن چیزی که باید واقعی تست شود (مثلاً کوئری دیتابیس)."
-      ],
-      "deliverable": "برنامهٔ تست + مجموعهٔ تست سبز + گزارش پوشش و شکاف‌ها"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "security",
@@ -828,93 +266,19 @@
         "profile": "security",
         "skills": "security-review,security-scan,agent-security-hardening,django-security,springboot-security"
       },
-      "skills": [
-        "security-review",
-        "security-scan",
-        "security-bounty-hunter",
-        "agent-security-hardening",
-        "django-security",
-        "laravel-security",
-        "springboot-security",
-        "quarkus-security",
-        "defi-amm-security",
-        "hipaa-compliance"
-      ],
+      "skills": [],
       "commands": [
-        "security-scan",
         "code-review",
-        "quality-gate",
-        "harness-audit"
+        "quality-gate"
       ],
       "agents": [
-        "security-reviewer",
-        "code-reviewer",
-        "database-reviewer"
+        "code-reviewer"
       ],
-      "steps": [
-        {
-          "t": "مدل تهدید سبک",
-          "d": "دارایی‌ها، ورودی‌های غیرقابل‌اعتماد، مرزهای اعتماد و مسیرهای سوءاستفاده را در یک صفحه بنویسید.",
-          "cmds": [
-            "/plan",
-            "Skill: security-review"
-          ],
-          "simpleTitle": "خطرهای مهم را بشناسید"
-        },
-        {
-          "t": "بازبینی کد",
-          "d": "تزریق، XSS، CSRF، IDOR، آپلود فایل و مدیریت نشست را سیستماتیک چک کنید.",
-          "cmds": [
-            "/code-review",
-            "Agent: security-reviewer"
-          ],
-          "simpleTitle": "کد را بررسی کنید"
-        },
-        {
-          "t": "رازها و پیکربندی",
-          "d": "هیچ رازی در کد/تاریخچهٔ گیت نباشد؛ کلیدها با چرخش دوره‌ای و حداقل دسترسی.",
-          "cmds": [
-            "/security-scan",
-            "Skill: security-scan"
-          ],
-          "simpleTitle": "رمزها و تنظیمات را امن نگه دارید"
-        },
-        {
-          "t": "وابستگی‌ها و زیرساخت",
-          "d": "آسیب‌پذیری بسته‌ها، هدرهای امنیتی، محدودسازی نرخ و پیکربندی کانتینر.",
-          "cmds": [
-            "/security-scan",
-            "Skill: docker-patterns"
-          ],
-          "simpleTitle": "ابزارهای وابسته و زیرساخت را بررسی کنید"
-        },
-        {
-          "t": "سخت‌سازی ایجنت/MCP",
-          "d": "دسترسی ابزار، ورودی غیرقابل‌اعتماد و نوشتن در فایل را محدود کنید.",
-          "cmds": [
-            "Skill: agent-security-hardening",
-            "/harness-audit"
-          ],
-          "simpleTitle": "دسترسی دستیار هوشمند را محدود کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — بازبینی امنیتی متمرکز",
-          "text": "این محدوده از کد را با نگاه مهاجم بررسی کن: {project}\nبرای هر یافته بده: مسیر بهره‌برداری، پیش‌شرط، اثر، شدت (Critical/High/Medium/Low)، و پچ حداقلی.\nحداقل این دسته‌ها را پوشش بده: تزریق (SQL/فرمان/قالب)، XSS/CSRF، احراز هویت و مدیریت نشست، IDOR/مجوز سطح شیء، آپلود فایل، SSRF، نشت داده در خطا/لاگ، و رازهای hard-code.\nهیچ یافته‌ای را بدون شاهد در کد گزارش نکن."
-        },
-        {
-          "title": "پرامپت ۲ — سخت‌سازی پیش از انتشار",
-          "text": "چک‌لیست پیش از انتشار {project} را اجرا کن:\n- رازها: اسکن کد و تاریخچهٔ گیت، چرخش کلیدهای افشاشده\n- احراز هویت: نرخ‌محدودسازی ورود، قفل موقت، MFA برای نقش‌های حساس\n- هدرها: CSP، HSTS، X-Content-Type-Options، Referrer-Policy\n- دیتابیس: حداقل دسترسی، پشتیبان رمزنگاری‌شده، تست بازیابی\n- لاگ و پایش: رویدادهای امنیتی، بدون PII\n\nبرای هر مورد: وضعیت فعلی، فاصله تا استاندارد، و اقدام."
-        }
-      ],
-      "pitfalls": [
-        "مجوز فقط در لایهٔ UI و نه در API.",
-        "رازها در .env کامیت‌شده یا در لاگ‌ها.",
-        "نادیده گرفتن ورودی‌های غیرمستقیم (نام فایل، هدر، پارامتر URL).",
-        "اجرای ابزار ایجنت با دسترسی کامل بدون محدودیت مسیر."
-      ],
-      "deliverable": "گزارش یافته‌ها با شدت + پچ‌ها + چک‌لیست پیش از انتشار"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "performance",
@@ -933,81 +297,21 @@
       },
       "skills": [
         "benchmark",
-        "benchmark-optimization-loop",
-        "react-performance",
-        "frontend-patterns",
-        "latency-critical-systems",
-        "data-throughput-accelerator",
-        "redis-patterns",
-        "postgres-patterns"
+        "frontend-patterns"
       ],
       "commands": [
         "plan",
         "code-review",
-        "quality-gate",
-        "test-coverage"
+        "quality-gate"
       ],
       "agents": [
-        "performance-optimizer",
-        "code-reviewer",
-        "database-reviewer"
+        "code-reviewer"
       ],
-      "steps": [
-        {
-          "t": "خط پایه",
-          "d": "LCP/INP/CLS، حجم صفحه، p50/p95 اندپوینت‌ها و زمان بیلد را ثبت کنید.",
-          "cmds": [
-            "Skill: benchmark",
-            "Skill: browser-qa"
-          ],
-          "simpleTitle": "سرعت فعلی را اندازه بگیرید"
-        },
-        {
-          "t": "پیدا کردن گلوگاه",
-          "d": "با پروفایل واقعی (نه حدس): waterfall درخواست، رندرهای اضافه، کوئری کند.",
-          "cmds": [
-            "Skill: benchmark-optimization-loop"
-          ],
-          "simpleTitle": "علت کندی را پیدا کنید"
-        },
-        {
-          "t": "یک تغییر، یک اندازه‌گیری",
-          "d": "هر تکرار فقط یک فرضیه؛ عدد قبل/بعد را ثبت کنید و اگر بهتر نشد برگردانید.",
-          "cmds": [
-            "Skill: benchmark-optimization-loop"
-          ],
-          "simpleTitle": "هر تغییر را جداگانه بسنجید"
-        },
-        {
-          "t": "گیت صحت",
-          "d": "بهینه‌سازی نباید رفتار را بشکند؛ تست‌ها باید قبل از پذیرش سبز باشند.",
-          "cmds": [
-            "/test-coverage",
-            "/quality-gate"
-          ],
-          "simpleTitle": "درستی برنامه را دوباره بررسی کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — خط پایه",
-          "text": "برای {project} یک خط پایهٔ کارایی بگیر:\n- Core Web Vitals (LCP/INP/CLS) در موبایل و دسکتاپ، حداقل ۳ اجرا\n- حجم JS/CSS و تعداد درخواست‌ها\n- p50/p95 برای سه اندپوینت اصلی\n- زمان بیلد و تست\n\nخروجی: جدول عددی + سه گلوگاه محتمل (با شاهد، نه حدس) و پیشنهاد یک تغییر کم‌ریسک با بالاترین اثر."
-        },
-        {
-          "title": "پرامپت ۲ — حلقهٔ بهینه‌سازی",
-          "text": "با اسکیل benchmark-optimization-loop این چرخه را اجرا کن و برای هر دور گزارش بده:\n۱) فرضیهٔ تک‌خطی و دلیل آن\n۲) تغییر حداقلی (کمتر از ۵۰ خط اگر ممکن است)\n۳) اندازه‌گیری با همان بنچمارک خط پایه\n۴) تصمیم: نگه‌داشتن یا برگرداندن — با ذکر عدد\n\nحداکثر ۵ دور. در پایان: جدول دور‌ها، مجموع بهبود، و ریسک‌های باقی‌مانده. هیچ بهینه‌سازی را بدون عدد «بهتر» اعلام نکن."
-        },
-        {
-          "title": "پرامپت ۳ — کوئری‌های کند",
-          "text": "این کوئری/مسیر داده را بررسی کن:\n- EXPLAIN و پلن اجرا، اسکن کامل جدول\n- ایندکس‌های گمشده یا بلااستفاده\n- N+1 در لایهٔ ORM و راه حل (join / dataloader / batch)\n- حجم داده منتقل‌شده و امکان صفحه‌بندی/کش\n\nبرای هر مورد، پچ + اندازه‌گیری قبل/بعد. اسکیل‌های postgres-patterns و redis-patterns را رعایت کن."
-        }
-      ],
-      "pitfalls": [
-        "بهینه‌سازی بدون خط پایه → نمی‌دانید بهتر شد یا بدتر.",
-        "کش کردن چیزی که نباید کش شود → دادهٔ کهنه و باگ‌های سخت.",
-        "قربانی کردن دسترسی‌پذیری/خوانایی برای چند میلی‌ثانیه."
-      ],
-      "deliverable": "جدول خط پایه + گزارش دورهای بهینه‌سازی + پچ‌های تأییدشده"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "seo",
@@ -1025,78 +329,22 @@
         "skills": "seo,brand-voice,article-writing,frontend-slides"
       },
       "skills": [
-        "seo",
-        "brand-voice",
-        "brand-discovery",
-        "article-writing",
-        "frontend-slides",
-        "content-engine",
-        "market-research",
-        "i18n-sync"
+        "seo"
       ],
       "commands": [
         "plan",
         "update-docs",
-        "marketing-campaign",
         "code-review"
       ],
       "agents": [
         "seo-specialist",
-        "marketing-agent",
-        "doc-updater",
         "a11y-architect"
       ],
-      "steps": [
-        {
-          "t": "ممیزی سئوی فنی",
-          "d": "ایندکس‌پذیری، ساختار URL، متا، sitemap/robots، دادهٔ ساختاریافته و CWV.",
-          "cmds": [
-            "Skill: seo"
-          ],
-          "simpleTitle": "وضعیت فعلی سایت را بررسی کنید"
-        },
-        {
-          "t": "نقشهٔ کلمات کلیدی",
-          "d": "یک صفحه = یک هدف جست‌وجو؛ هم‌نیت (intent) مهم‌تر از حجم جست‌وجوست.",
-          "cmds": [
-            "Skill: market-research"
-          ],
-          "simpleTitle": "موضوع‌های جست‌وجوی مخاطبان را پیدا کنید"
-        },
-        {
-          "t": "لحن و تولید محتوا",
-          "d": "پروفایل لحن از نمونه‌های واقعی بسازید تا متن شبیه «متوسط AI» نشود.",
-          "cmds": [
-            "Skill: brand-voice",
-            "Skill: article-writing"
-          ],
-          "simpleTitle": "محتوای روشن و مفید بنویسید"
-        },
-        {
-          "t": "ارائه و اسلاید",
-          "d": "اسلاید HTML سبک و متحرک یا تبدیل PPTX به وب.",
-          "cmds": [
-            "Skill: frontend-slides"
-          ],
-          "simpleTitle": "محتوا را برای ارائه آماده کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — ممیزی سئو",
-          "text": "سایت {project} را ممیزی کن و خروجی را در سه بخش بده:\n۱) فنی: ایندکس‌پذیری، canonical، sitemap/robots، ریدایرکت‌ها، دادهٔ ساختاریافته، CWV\n۲) درون‌صفحه: title/description یکتا، ساختار H1-H6، لینک داخلی، متن جایگزین تصاویر\n۳) محتوا: شکاف نیت جست‌وجو و صفحات کاندید برای ادغام/حذف\n\nبرای هر مورد: شاهد، اثر تخمینی، و اقدام مشخص. از توصیه‌های کلی بپرهیز."
-        },
-        {
-          "title": "پرامپت ۲ — محتوای صفحه",
-          "text": "یک صفحه برای هدف جست‌وجوی «{project}» بنویس:\n- ساختار: مسئلهٔ خواننده در ۲ خط، راه حل، جزئیات فنی، پرسش‌های متداول\n- عنوان‌های فرعی طبیعی و بدون کلیدواژه‌بازی\n- مثال واقعی و عدد مشخص؛ ادعای بی‌منبع ننویس\n- لحن مطابق پروفایل brand-voice (اگر نداریم اول بساز)\n\nقواعد: پاراگراف کوتاه، بدون فهرست بی‌پایان، بدون عبارت‌های کلیشه‌ای مثل «در دنیای امروز»."
-        }
-      ],
-      "pitfalls": [
-        "انبوه‌سازی صفحات نازک → افت کیفیت دامنه.",
-        "کلیدواژه‌بازی در عنوان به‌جای پاسخ به نیت.",
-        "متن تولیدی بدون نمونهٔ لحن و بدون ویرایش انسانی."
-      ],
-      "deliverable": "گزارش سئو + نقشهٔ محتوا + صفحات/اسلاید آماده"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "devops",
@@ -1114,78 +362,21 @@
         "skills": "docker-patterns,deployment-patterns,kubernetes-patterns,canary-watch"
       },
       "skills": [
-        "docker-patterns",
-        "deployment-patterns",
-        "kubernetes-patterns",
-        "canary-watch",
-        "production-audit",
-        "benchmark",
-        "canary-watch"
+        "benchmark"
       ],
       "commands": [
         "plan",
-        "quality-gate",
-        "test-coverage",
-        "pm2",
-        "checkpoint"
+        "quality-gate"
       ],
       "agents": [
         "architect",
-        "security-reviewer",
         "code-reviewer"
       ],
-      "steps": [
-        {
-          "t": "بسته‌بندی",
-          "d": "Dockerfile چندمرحله‌ای، کاربر غیر root، تصویر کوچک و reproducible.",
-          "cmds": [
-            "Skill: docker-patterns"
-          ],
-          "simpleTitle": "برنامه را برای اجرا آماده کنید"
-        },
-        {
-          "t": "پایپ‌لاین",
-          "d": "لینت → تست → بیلد → اسکن تصویر → مهاجرت → انتشار، با کش و موازی‌سازی.",
-          "cmds": [
-            "Skill: deployment-patterns"
-          ],
-          "simpleTitle": "مراحل ساخت و آزمون خودکار را تنظیم کنید"
-        },
-        {
-          "t": "سلامت و بازگشت",
-          "d": "health/readiness، مهاجرت سازگار و rollback تمرین‌شده.",
-          "cmds": [
-            "Skill: database-migrations"
-          ],
-          "simpleTitle": "راه بازگشت در زمان خطا را آماده کنید"
-        },
-        {
-          "t": "پایش پس از انتشار",
-          "d": "پس از هر دیپلوی، اندپوینت‌ها، استریم‌ها و خطاهای کنسول را خودکار چک کنید.",
-          "cmds": [
-            "Skill: canary-watch",
-            "Skill: production-audit"
-          ],
-          "simpleTitle": "پس از انتشار سلامت را بررسی کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — کانتینر و CI",
-          "text": "برای {project} با {stack}:\n۱) Dockerfile چندمرحله‌ای بنویس (کاربر غیر root، بدون کلید build-time، تصویر < ۲۰۰MB اگر ممکن است) + .dockerignore\n۲) docker-compose برای محیط توسعه با healthcheck\n۳) پایپ‌لاین CI: لینت، تایپ‌چک، تست با کش، بیلد تصویر، اسکن، و شرط انتشار\n۴) نسخه‌بندی تصویر و راهبرد بازگشت\n\nهمه را با اسکیل docker-patterns و deployment-patterns تطبیق بده و تفاوت‌ها را توضیح بده."
-        },
-        {
-          "title": "پرامپت ۲ — انتشار امن",
-          "text": "یک چک‌لیست و رویهٔ انتشار برای {project} بنویس:\n- پیش‌نیازها: تست سبز، مهاجرت سازگار (expand/contract)، feature flag\n- مراحل: canary ۱۰٪ → پایش ۱۵ دقیقه → ۵۰٪ → ۱۰۰٪\n- معیار توقف (نرخ خطا، تأخیر p95، خطای کنسول)\n- رویهٔ rollback: دستور دقیق و دادهٔ سازگار\n- پس از انتشار: چک‌لیست canary-watch و گزارش\n\nهیچ مرحله‌ای را بدون معیار عددی ننویس."
-        }
-      ],
-      "pitfalls": [
-        "مهاجرت دیتابیس و دیپلوی کد هم‌زمان و ناسازگار.",
-        "rollback بدون سازگاری داده.",
-        "رازها در متغیر محیطی بیلد و مانده در لایهٔ تصویر.",
-        "پایش فقط CPU، بدون خطای کاربر و تأخیر."
-      ],
-      "deliverable": "Dockerfile + CI + runbook انتشار/بازگشت + گزارش پایش"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "database",
@@ -1201,76 +392,21 @@
         "profile": "developer",
         "skills": "database-migrations,postgres-patterns,prisma-patterns,redis-patterns"
       },
-      "skills": [
-        "database-migrations",
-        "postgres-patterns",
-        "mysql-patterns",
-        "prisma-patterns",
-        "redis-patterns",
-        "clickhouse-io",
-        "latency-critical-systems"
-      ],
+      "skills": [],
       "commands": [
         "plan",
         "code-review",
         "quality-gate"
       ],
       "agents": [
-        "database-reviewer",
         "architect",
         "code-reviewer"
       ],
-      "steps": [
-        {
-          "t": "مدل داده",
-          "d": "موجودیت‌ها، کلیدها، محدودیت‌ها و مسیرهای کوئری اصلی را قبل از نوشتن بنویسید.",
-          "cmds": [
-            "/plan",
-            "Skill: postgres-patterns"
-          ],
-          "simpleTitle": "ساختار اطلاعات را مشخص کنید"
-        },
-        {
-          "t": "ایندکس هدفمند",
-          "d": "ایندکس بر اساس کوئری واقعی، نه حدس؛ ایندکس‌های بلااستفاده را حذف کنید.",
-          "cmds": [
-            "Skill: postgres-patterns"
-          ],
-          "simpleTitle": "جست‌وجوی اطلاعات را بهبود دهید"
-        },
-        {
-          "t": "مهاجرت بی‌توقف",
-          "d": "expand → backfill دسته‌ای → سوییچ خواندن → contract؛ هر مرحله جدا و برگشت‌پذیر.",
-          "cmds": [
-            "Skill: database-migrations"
-          ],
-          "simpleTitle": "تغییر ساختار را با برنامه انجام دهید"
-        },
-        {
-          "t": "کش و صف",
-          "d": "کلید کش، TTL، invalidation و idempotency عملیات.",
-          "cmds": [
-            "Skill: redis-patterns"
-          ],
-          "simpleTitle": "نیاز به حافظه موقت و صف را بررسی کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — طراحی اسکیما",
-          "text": "برای {project} اسکیمای دیتابیس را طراحی کن:\n- موجودیت‌ها، کلید اصلی/خارجی، محدودیت‌های یکتایی و null\n- ۵ کوئری پرتکرار و ایندکس لازم برای هرکدام\n- راهبرد حذف (soft/hard) و نگهداری تاریخچه\n- تخمین حجم رشد و نقطهٔ شکست\n\nخروجی: DDL + یک صفحه توضیح تصمیم‌ها. اگر تصمیمی به ADR نیاز دارد، جدا کن."
-        },
-        {
-          "title": "پرامپت ۲ — مهاجرت روی سیستم زنده",
-          "text": "می‌خواهم ستون/جدول {project} را روی سیستم زنده تغییر دهم.\nبا الگوی expand/contract یک برنامهٔ مرحله‌ای بده:\n۱) مرحلهٔ expand (سازگار با کد قدیم)\n۲) backfill دسته‌ای با حجم مشخص در هر دسته و امکان توقف\n۳) سوییچ خواندن/نوشتن با feature flag\n۴) contract و حذف ساختار قدیم\n۵) مسیر بازگشت در هر مرحله\n\nبرای هر مرحله: دستور، معیار موفقیت، و اثر قفل (lock) را بنویس."
-        }
-      ],
-      "pitfalls": [
-        "ALTER TABLE قفل‌کننده در ساعات پرترافیک.",
-        "backfill یک‌جا → بار سنگین و توقف طولانی تراکنش.",
-        "کش بدون invalidate → دادهٔ کهنه و تصمیم غلط."
-      ],
-      "deliverable": "DDL + برنامهٔ مهاجرت مرحله‌ای + تحلیل ایندکس"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "onboarding",
@@ -1287,80 +423,17 @@
         "profile": "developer",
         "skills": "codebase-onboarding,code-tour,docs-governance,documentation-lookup"
       },
-      "skills": [
-        "codebase-onboarding",
-        "code-tour",
-        "docs-governance",
-        "living-docs-governance",
-        "documentation-lookup",
-        "change-impact",
-        "brownfield-retrospective"
-      ],
+      "skills": [],
       "commands": [
         "update-docs",
-        "update-codemaps",
-        "plan",
-        "learn"
+        "plan"
       ],
-      "agents": [
-        "code-explorer",
-        "doc-updater",
-        "spec-miner",
-        "comment-analyzer",
-        "docs-lookup"
-      ],
-      "steps": [
-        {
-          "t": "نقشهٔ اولیه",
-          "d": "ساختار پوشه، نقاط ورود، جریان درخواست و پیکربندی محیط.",
-          "cmds": [
-            "Skill: codebase-onboarding"
-          ],
-          "simpleTitle": "نقشه کلی پروژه را تهیه کنید"
-        },
-        {
-          "t": "مسیر مطالعه",
-          "d": "یک tour مرحله‌ای با فایل/خط واقعی برای نقش‌های مختلف (فرانت، بک، دواپس).",
-          "cmds": [
-            "Skill: code-tour",
-            "Agent: code-explorer"
-          ],
-          "simpleTitle": "مسیر خواندن و یادگیری را مشخص کنید"
-        },
-        {
-          "t": "استخراج قراردادها",
-          "d": "رفتار فعلی را به‌صورت requirement/invariant ثبت کنید تا ریفکتور امن شود.",
-          "cmds": [
-            "Skill: spec-miner"
-          ],
-          "simpleTitle": "قواعد و ارتباط‌های مهم را پیدا کنید"
-        },
-        {
-          "t": "به‌روز نگه داشتن",
-          "d": "اسناد را به تغییرات کد گره بزنید و در CI بررسی کنید.",
-          "cmds": [
-            "/update-docs",
-            "Skill: docs-governance"
-          ],
-          "simpleTitle": "راهنما را به‌روز نگه دارید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — نقشهٔ کدبیس",
-          "text": "این کدبیس را تحلیل کن و یک راهنمای آنبوردینگ ۱ صفحه‌ای بده:\n۱) معماری کلی و مؤلفه‌های اصلی (با مسیر فایل)\n۲) نقاط ورود و جریان یک درخواست نمونه از ابتدا تا پاسخ\n۳) محیط توسعه: پیش‌نیازها، دستور اجرا، تست، لینت\n۴) ۵ اصطلاح دامنه که تازه‌وارد نمی‌داند\n۵) ۵ فایلی که باید اول خوانده شوند و چرا\n\nهیچ فایلی را تغییر نده؛ فقط تحلیل و پیشنهاد ساختار مستندات."
-        },
-        {
-          "title": "پرامپت ۲ — Code Tour",
-          "text": "برای نقش «{project}» یک code tour بساز: ۸ تا ۱۲ گام، هر گام با فایل و محدودهٔ خط واقعی، یک جمله توضیح «چرا اینجا مهم است» و یک سؤال برای خودآزمایی.\nمسیر: نقطهٔ ورود → لایهٔ مسیر/کنترلر → سرویس → داده → تست مربوطه.\nاز اسکیل code-tour استفاده کن و خروجی را در .tours/ ذخیره کن."
-        }
-      ],
-      "pitfalls": [
-        "مستندات تکراری از روی کد → زودی کهنه می‌شوند.",
-        "نقشه بدون خطاهای واقعی: مسیرهای شکسته/مرده هم مستند می‌شوند.",
-        "مستند بدون مالک و بدون گیت به‌روزرسانی."
-      ],
-      "deliverable": "راهنمای آنبوردینگ + code tour + فهرست قراردادهای رفتاری"
+      "agents": [],
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "data",
@@ -1377,75 +450,19 @@
         "profile": "full",
         "skills": "mle-workflow,pytorch-patterns,clickhouse-io,data-throughput-accelerator"
       },
-      "skills": [
-        "mle-workflow",
-        "pytorch-patterns",
-        "python-patterns",
-        "python-testing",
-        "clickhouse-io",
-        "data-throughput-accelerator",
-        "data-scraper-agent",
-        "regex-vs-llm-structured-text",
-        "deep-research"
-      ],
+      "skills": [],
       "commands": [
         "plan",
-        "code-review",
-        "test-coverage"
+        "code-review"
       ],
       "agents": [
-        "mle-reviewer",
-        "pytorch-build-resolver",
-        "database-reviewer",
         "code-reviewer"
       ],
-      "steps": [
-        {
-          "t": "قرارداد داده",
-          "d": "اسکیما، بازهٔ مجاز، مقدار گمشده و معنای هر ستون — قبل از مدل.",
-          "cmds": [
-            "Skill: mle-workflow"
-          ],
-          "simpleTitle": "شکل و کیفیت داده‌ها را مشخص کنید"
-        },
-        {
-          "t": "پایپ‌لاین تکرارپذیر",
-          "d": "نسخهٔ داده، seed، محیط و لاگ اجرا؛ هر آموزش باید بازتولید شود.",
-          "cmds": [
-            "Skill: pytorch-patterns"
-          ],
-          "simpleTitle": "مراحل آماده‌سازی را قابل تکرار کنید"
-        },
-        {
-          "t": "ارزیابی واقع‌بینانه",
-          "d": "تقسیم زمانی/گروهی، معیار متناسب با هزینهٔ خطا و ارزیابی خارج از نمونه.",
-          "cmds": [
-            "Skill: mle-workflow"
-          ],
-          "simpleTitle": "نتیجه را واقع‌بینانه بررسی کنید"
-        },
-        {
-          "t": "سرو و پایش",
-          "d": "دريفت داده، تأخیر استنتاج و مسیر بازگشت به مدل قبلی.",
-          "cmds": [
-            "Skill: mle-workflow",
-            "Skill: latency-critical-systems"
-          ],
-          "simpleTitle": "نتیجه را ارائه و پایش کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — قرارداد و ارزیابی",
-          "text": "برای {project} یک برنامهٔ ML بنویس:\n۱) قرارداد داده: اسکیما، دامنهٔ مجاز، مقدار گمشده، نشت (leakage) ممکن\n۲) معیار موفقیت کسب‌وکاری + معیار مدل، با عدد\n۳) راهبرد تقسیم داده و دلیل آن\n۴) خط پایهٔ ساده (heuristic) که مدل باید بهتر از آن باشد\n۵) ریسک‌های تولید: دريفت، تأخیر، هزینهٔ استنتاج\n\nکدی ننویس؛ فقط طرح و تصمیم‌ها."
-        }
-      ],
-      "pitfalls": [
-        "نشت داده از آینده به گذشته در تقسیم تصادفی.",
-        "معیار نامتناسب با هزینهٔ خطا (مثلاً accuracy در دادهٔ نامتوازن).",
-        "نبود خط پایه → نمی‌دانید مدل ارزش دارد یا نه."
-      ],
-      "deliverable": "طرح داده/مدل + پایپ‌لاین تکرارپذیر + گزارش ارزیابی"
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     },
     {
       "id": "harness",
@@ -1461,78 +478,15 @@
         "profile": "minimal"
       },
       "skills": [
-        "agent-sort",
-        "configure-ecc",
-        "workspace-surface-audit",
-        "skill-scout",
         "agent-harness-construction"
       ],
-      "commands": [
-        "harness-audit",
-        "ecc-guide",
-        "auto-update",
-        "skill-health",
-        "skill-host-compat",
-        "hookify"
-      ],
-      "agents": [
-        "harness-optimizer",
-        "docs-lookup"
-      ],
-      "steps": [
-        {
-          "t": "کلون و نصب",
-          "d": "کلون، سپس نصب با پروفایل مناسب. hookها نیاز به تصمیم صریح دارند (--enable-hooks یا --no-hooks).",
-          "cmds": [
-            "./kit/install-kit.sh --dry-run",
-            "./install.sh --profile minimal --target claude"
-          ],
-          "simpleTitle": "نسخه محلی و ابزارها را آماده کنید"
-        },
-        {
-          "t": "انتخاب گزیده برای ریپو",
-          "d": "با agent-sort فقط چیزهایی که روزانه لازم دارید نصب شوند تا context هدر نرود.",
-          "cmds": [
-            "Skill: agent-sort",
-            "Skill: workspace-surface-audit"
-          ],
-          "simpleTitle": "ابزارهای مورد نیاز پروژه را انتخاب کنید"
-        },
-        {
-          "t": "سخت‌افزار هدف",
-          "d": "برای Codex/Cursor/OpenCode/Gemini/Zed/Copilot مسیر نصب جدا وجود دارد.",
-          "cmds": [
-            "./install.sh --profile minimal --target cursor",
-            "./install.sh --profile full --target copilot"
-          ],
-          "simpleTitle": "محدودیت محیط اجرا را بررسی کنید"
-        },
-        {
-          "t": "بازبینی هارنس",
-          "d": "مصرف context، hooks و تداخل‌ها را بررسی و هرس کنید.",
-          "cmds": [
-            "/harness-audit",
-            "Skill: harness-optimizer"
-          ],
-          "simpleTitle": "تنظیمات دستیار را بازبینی کنید"
-        }
-      ],
-      "prompts": [
-        {
-          "title": "پرامپت ۱ — برنامهٔ نصب متناسب",
-          "text": "این ریپو را بررسی کن و یک برنامهٔ نصب ECC پیشنهاد بده:\n۱) زبان‌ها/فریمورک‌های واقعی و درصد کد\n۲) ۱۰ اسکیل پرکاربرد روزانه برای همین ریپو + ۵ کامند + ۴ agent\n۳) مواردی که آگاهانه نصب نمی‌کنیم (با دلیل: context، عدم کاربرد)\n۴) دستور دقیق نصب گزیده و پروفایل پیشنهادی\n۵) تصمیم در مورد hookها: لازم است یا نه، با دلیل\n\nاز اسکیل agent-sort استفاده کن و خروجی را در یک فایل ذخیره کن."
-        },
-        {
-          "title": "پرامپت ۲ — بازبینی هارنس",
-          "text": "تنظیمات فعلی ECC/هارنس من را بازبینی کن:\n- اسکیل‌ها و کامندهای نصب‌شده و مصرف context\n- hookهای فعال و اینکه چه چیزی را مسدود می‌کنند\n- MCP serverها و دسترسی‌هایشان\n- تداخل‌ها و موارد هرس‌کردنی\n\nخروجی: جدول وضعیت + ۵ اقدام با اولویت، و بعد اجرای /harness-audit و خلاصهٔ نتیجه."
-        }
-      ],
-      "pitfalls": [
-        "نصب پروفایل full روی پروژهٔ کوچک → context شلوغ و کندی.",
-        "فعال کردن hookها بدون خواندن اینکه چه چیزی را مسدود می‌کنند.",
-        "نصب هم‌زمان پلاگین marketplace و install.sh --profile full."
-      ],
-      "deliverable": "برنامهٔ نصب گزیده + دستورهای آماده + گزارش هارنس"
+      "commands": [],
+      "agents": [],
+      "steps": [],
+      "prompts": [],
+      "pitfalls": [],
+      "deliverable": "برای مشاهده محتوای کامل اشتراک پلاس لازم است.",
+      "sample": true
     }
   ]
 }

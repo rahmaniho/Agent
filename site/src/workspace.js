@@ -31,7 +31,105 @@ gate.addEventListener('keydown', event => {
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 });
 setGate(true);
-let accountGeneration = 0, adminRows = [];
+let accountGeneration = 0, adminRows = [], expiryTimer;
+function publishCatalog(payload) {
+  window.studioCatalog = payload;
+  window.dispatchEvent(new CustomEvent('studio:catalog', {detail: payload}));
+}
+function resetPremium() { clearTimeout(expiryTimer); publishCatalog(null); }
+const purchaseStatus = $('#purchaseStatus');
+const purchaseForm = $('#purchaseForm');
+const purchaseEmail = $('#purchaseEmail');
+function paymentMailto(row, accountEmail) {
+  const paymentTime = new Date(row.paid_at);
+  if (!row.payer_email || Number.isNaN(paymentTime.getTime())) return null;
+  const subject = 'درخواست فعال‌سازی اشتراک یک‌ساله Agent Studio';
+  const body = [
+    'سلام، لطفاً پرداخت و درخواست اشتراک مرا بررسی کنید.',
+    `مبلغ: ${Number(row.amount_toman).toLocaleString('fa-IR')} تومان`,
+    'دوره: یک سال',
+    `کد پیگیری: ${row.payment_reference}`,
+    `تاریخ و ساعت واریز: ${paymentTime.toLocaleString('fa-IR')} (زمان محلی ارسال‌کننده)`,
+    `زمان جهانی: ${paymentTime.toISOString()}`,
+    `ایمیل پرداخت‌کننده: ${row.payer_email}`,
+    `ایمیل حساب: ${accountEmail || 'نامشخص'}`,
+  ].join('\n');
+  return `mailto:rahmani.hosseine@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+async function loadPurchases() {
+  $('#purchaseHistory').replaceChildren();
+  if (!user) return;
+  const who = user.id;
+  const {data, error} = await supabase.rpc('studio_my_purchases');
+  if (user?.id !== who) return;
+  if (error) { report(purchaseStatus, error); return; }
+  for (const row of data || []) {
+    const item = document.createElement('li');
+    const names = {pending:'در انتظار بررسی',approved:'تأیید شده',rejected:'رد شده'};
+    const details = document.createElement('span');
+    details.textContent = `${names[row.status] || 'نامشخص'} — ${row.payment_reference}`;
+    item.append(details);
+    const href = row.status === 'pending' && paymentMailto(row, user.email);
+    if (href) { const link = document.createElement('a'); link.href = href; link.textContent = 'نوشتن ایمیل به مدیر'; item.append(link); }
+    $('#purchaseHistory').append(item);
+  }
+}
+purchaseForm.addEventListener('submit', async event => {
+  event.preventDefault(); if (!user || !purchaseForm.reportValidity()) return;
+  const reference = $('#purchaseReference').value.trim();
+  const payerEmail = $('#purchasePayerEmail').value.trim().toLowerCase();
+  const paid = new Date($('#purchasePaidAt').value);
+  if (Number.isNaN(paid.getTime()) || paid.getTime() > Date.now() + 5 * 60 * 1000) { purchaseStatus.textContent = 'تاریخ و ساعت واریز باید در گذشته باشد.'; return; }
+  const who = user.id, accountEmail = user.email;
+  const button = purchaseForm.querySelector('button'); button.disabled = true;
+  purchaseStatus.textContent = 'در حال ثبت درخواست...'; purchaseEmail.hidden = true;
+  try {
+    const {error} = await supabase.rpc('studio_submit_purchase', {reference, payer_email:payerEmail, paid_at:paid.toISOString()});
+    if (user?.id !== who) return;
+    if (error) {
+      purchaseStatus.textContent = error.code === '23505' ? 'یک درخواست در انتظار بررسی دارید.' : 'ثبت درخواست ممکن نشد؛ اطلاعات و اتصال را بررسی کنید.';
+    } else {
+      purchaseEmail.href = paymentMailto({payment_reference:reference,payer_email:payerEmail,paid_at:paid.toISOString(),amount_toman:990000},accountEmail);
+      purchaseEmail.hidden = false; purchaseForm.reset();
+      purchaseStatus.textContent = 'درخواست ثبت شد. برای فرستادن ایمیل، دکمهٔ زیر را بزنید و پیام را ارسال کنید.';
+      await loadPurchases();
+    }
+  } catch { if (user?.id === who) purchaseStatus.textContent = 'ثبت درخواست ممکن نشد؛ اتصال را بررسی کنید.'; }
+  finally { button.disabled = false; }
+});
+async function loadAdminPurchases(generation) {
+  const host = $('#adminPurchases'); host.replaceChildren(); $('#adminPurchaseStatus').textContent = 'در حال دریافت درخواست‌ها...';
+  const {data,error} = await supabase.rpc('studio_admin_purchases');
+  if (generation !== accountGeneration) return;
+  if (error) { report($('#adminPurchaseStatus'), error); return; }
+  $('#adminPurchaseStatus').textContent = data?.length ? `${faNumber(data.length)} درخواست در انتظار بررسی` : 'درخواستی در انتظار بررسی نیست.';
+  for (const request of data || []) {
+    const row = document.createElement('div'); row.className = 'pending-row';
+    const text = document.createElement('div'); text.className = 'pending-details';
+    const heading = document.createElement('strong'); heading.textContent = `حساب: ${request.email || 'بدون ایمیل'}`;
+    const details = document.createElement('span');
+    const parsed = request.paid_at ? new Date(request.paid_at) : null;
+    const time = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleString('fa-IR') : 'ثبت نشده';
+    details.textContent = `کد پیگیری: ${request.payment_reference} | واریز: ${time} (زمان محلی مدیر) | ایمیل پرداخت‌کننده: ${request.payer_email || 'ثبت نشده'} | مبلغ: ${Number(request.amount_toman || 990000).toLocaleString('fa-IR')} تومان`;
+    text.append(heading, details);
+    const date = document.createElement('input'); date.type = 'date';
+    const nextYear = new Date(); nextYear.setUTCFullYear(nextYear.getUTCFullYear() + 1); date.value = nextYear.toISOString().slice(0, 10); date.setAttribute('aria-label', `پایان اشتراک ${request.email || 'کاربر'}`);
+    const approve = document.createElement('button'); approve.type = 'button'; approve.textContent = 'تأیید و فعال‌سازی';
+    const reject = document.createElement('button'); reject.type = 'button'; reject.textContent = 'رد درخواست';
+    async function review(decision) {
+      const expiry = decision === 'approved' && date.value ? new Date(`${date.value}T23:59:59Z`) : null;
+      if (decision === 'approved' && (!expiry || Number.isNaN(expiry.getTime()) || expiry <= new Date())) { $('#adminPurchaseStatus').textContent = 'تاریخ پایان در آینده را انتخاب کنید.'; return; }
+      if (!window.confirm(decision === 'approved' ? 'پرداخت را بررسی کرده‌اید و می‌خواهید اشتراک را فعال کنید؟' : 'این درخواست رد شود؟')) return;
+      approve.disabled = true; reject.disabled = true;
+      const {error} = await supabase.rpc('studio_review_purchase', {request_id:request.id,decision,target_expiry:expiry?.toISOString() || null});
+      if (error) { report($('#adminPurchaseStatus'), error); approve.disabled = false; reject.disabled = false; }
+      else await refreshAccount();
+    }
+    approve.addEventListener('click', () => review('approved')); reject.addEventListener('click', () => review('rejected'));
+    row.append(text,date,approve,reject); host.append(row);
+  }
+}
+
 const faNumber = n => Number(n).toLocaleString('fa-IR');
 function drawAdmin() {
   const body = $('#adminUsers'); body.replaceChildren();
@@ -63,15 +161,29 @@ function drawAdmin() {
 $('#adminSearch').addEventListener('input', drawAdmin);
 async function refreshAccount() {
   const generation = ++accountGeneration;
-  $('#adminContent').hidden = true; adminRows = []; $('#adminUsers').replaceChildren();
-  if (!user) { $('#adminStatus').textContent = 'برای بررسی دسترسی، وارد حساب خود شوید.'; $('#accountPlan').textContent = '—'; return; }
+  $('#adminContent').hidden = true; adminRows = []; $('#adminUsers').replaceChildren(); $('#adminPurchases').replaceChildren();
+  if (!user) { resetPremium(); $('#adminStatus').textContent = 'برای بررسی دسترسی، وارد حساب خود شوید.'; $('#accountPlan').textContent = '—'; return; }
   $('#accountPlan').textContent = 'در حال بررسی...';
   const {data, error} = await supabase.rpc('studio_my_account');
   if (generation !== accountGeneration) return;
-  if (error || !data?.length) { $('#accountPlan').textContent = 'وضعیت اشتراک قابل دریافت نیست.'; $('#adminStatus').textContent = 'بررسی دسترسی ممکن نشد. دوباره تلاش کنید.'; return; }
+  if (error || !data?.length) { resetPremium(); $('#accountPlan').textContent = 'وضعیت اشتراک قابل دریافت نیست.'; $('#adminStatus').textContent = 'بررسی دسترسی ممکن نشد. دوباره تلاش کنید.'; return; }
   const account = data[0];
   $('#accountPlan').textContent = account.plan === 'plus' ? 'پلاس فعال' : 'رایگان';
   $('#accountExpiry').textContent = account.plan === 'plus' && account.expires_at ? `تا ${new Date(account.expires_at).toLocaleDateString('fa-IR')}` : '';
+  if (account.is_admin || account.plan === 'plus') {
+    const full = await supabase.rpc('studio_premium_catalog');
+    if (generation !== accountGeneration) return;
+    if (full.error || !full.data?.[0]?.catalog || !full.data[0].playbooks?.services) { resetPremium(); $('#accountPlan').textContent = 'دریافت محتوای اشتراک ممکن نشد.'; }
+    else {
+      publishCatalog(full.data[0]);
+      clearTimeout(expiryTimer);
+      if (!account.is_admin && account.expires_at) {
+        const remaining = new Date(account.expires_at).getTime() - Date.now();
+        if (remaining <= 0) resetPremium();
+        else expiryTimer = setTimeout(() => { resetPremium(); refreshAccount(); }, Math.min(remaining, 2147483647));
+      }
+    }
+  } else resetPremium();
   if (!account.is_admin) { $('#adminStatus').textContent = 'این بخش فقط برای مدیر است. اگر مدیر هنوز تعیین نشده، دسترسی فعال نیست.'; return; }
   $('#adminStatus').textContent = 'در حال دریافت حساب‌ها...';
   const result = await supabase.rpc('studio_admin_users');
@@ -80,7 +192,7 @@ async function refreshAccount() {
   adminRows = result.data || [];
   $('#adminUserCount').textContent = faNumber(adminRows.length);
   $('#adminPlusCount').textContent = faNumber(adminRows.filter(r => r.plan === 'plus' && new Date(r.expires_at) > new Date()).length);
-  $('#adminContent').hidden = false; $('#adminStatus').textContent = 'فهرست حساب‌ها آماده است.'; drawAdmin();
+  $('#adminContent').hidden = false; $('#adminStatus').textContent = 'فهرست حساب‌ها آماده است.'; drawAdmin(); await loadAdminPurchases(generation);
 }
 
 function noteControls() {
@@ -120,6 +232,9 @@ async function loadNotes(reset = true) {
 function updateSession(session) {
   const previous = user?.id;
   user = session?.user || null;
+  if (previous !== user?.id) { ++accountGeneration; resetPremium(); }
+  purchaseForm.hidden = !user; $('#purchaseLogin').hidden = !!user;
+  if (previous !== user?.id) { purchaseStatus.textContent = ''; purchaseEmail.hidden = true; purchaseEmail.removeAttribute('href'); purchaseForm.reset(); loadPurchases(); }
   $('#authLoggedOut').hidden = !!user; $('#workspaceLoggedOut').hidden = !!user; $('#authLoggedIn').hidden = !user;
   if (user) setGate(false);
   else { let guest = false; try { guest = sessionStorage.getItem('studio-guest') === '1'; } catch {} if (guest) setGate(false); }
@@ -151,6 +266,7 @@ $('#noteForm').addEventListener('submit', async event => {
 $('#notesMore').addEventListener('click', () => loadNotes(false));
 $('#notesRefresh').addEventListener('click', () => loadNotes());
 noteControls();
+document.addEventListener('visibilitychange', () => { if (!document.hidden && user) refreshAccount(); });
 refreshAccount();
 supabase.auth.onAuthStateChange((_event, session) => { updateSession(session); });
 supabase.auth.getSession().then(({ data, error }) => { if (error) report(authStatus, error); else { updateSession(data.session); if (authStatus.textContent === 'در حال آماده‌سازی حساب...') authStatus.textContent = ''; } }).catch(() => { authStatus.textContent = 'اتصال به حساب ممکن نشد؛ دوباره تلاش کنید یا بدون ورود ادامه دهید.'; });

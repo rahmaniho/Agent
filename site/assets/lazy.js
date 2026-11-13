@@ -13,7 +13,7 @@ function loadIntegrations() {
       document.querySelector('#guestAccess').addEventListener('click', () => { document.querySelector('#loginGate').hidden = true; document.body.classList.remove('login-open'); for (const node of document.body.children) node.inert = false; }, {once: true});
     });
   }
-  if (route === 'fcc' && !agent) {
+  if (route === 'fcc' && window.studioCatalog && !agent) {
     agent = import('./agent.js').catch(() => {
       agent = null;
       document.querySelector('#agentStatus').textContent = 'بارگذاری بخش ایجنت ناموفق بود؛ صفحه را دوباره بارگذاری کنید.';
@@ -21,4 +21,5 @@ function loadIntegrations() {
   }
 }
 window.addEventListener('hashchange', loadIntegrations);
+window.addEventListener('studio:catalog', loadIntegrations);
 loadIntegrations();
