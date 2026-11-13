@@ -696,3 +696,84 @@ test('premium descriptions are rendered as text, not HTML', async () => {
     assert.equal($('#libList').querySelector('img'),null); assert.match($('#libList').textContent,/<img src=x onerror=alert\(1\)>/);
   } finally {dom.window.close();}
 });
+
+test('catalog export validates output, avoids public paths and does not overwrite backups', async () => {
+  const {mkdtemp,writeFile,readFile,stat,chmod,rm}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os'); const {join,delimiter}=await import('node:path');
+  const {spawnSync}=await import('node:child_process');
+  const dir=await mkdtemp(join(tmpdir(),'studio-export-test-'));
+  try {
+    const fake=join(dir,'psql'), backup=join(dir,'backup.json');
+    const content={format:'agent-studio-catalog-v1',catalog:data,playbooks,postgres_jsonb_md5:{catalog:'0'.repeat(32),playbooks:'1'.repeat(32)}};
+    await writeFile(fake,`#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(JSON.stringify(content))})\n`); await chmod(fake,0o700);
+    const script=new URL('tools/export-catalog-backup.mjs',site).pathname;
+    const env={...process.env,PATH:`${dir}${delimiter}${process.env.PATH}`};
+    let result=spawnSync(process.execPath,[script,'--out',backup],{encoding:'utf8',env});
+    assert.equal(result.status,0,result.stderr); assert.equal((await stat(backup)).mode & 0o777,0o600); assert.equal(JSON.parse(await readFile(backup,'utf8')).format,'agent-studio-catalog-v1');
+    const restore=join(dir,'restore-from-export.sql');
+    result=spawnSync(process.execPath,[new URL('tools/prepare-catalog-restore.mjs',site).pathname,'--input',backup,'--out',restore],{encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr); assert.match(await readFile(restore,'utf8'),/rollback;\s*$/);
+    result=spawnSync(process.execPath,[script,'--out',backup],{encoding:'utf8',env}); assert.notEqual(result.status,0);
+    result=spawnSync(process.execPath,[script,'--out',new URL('assets/secret.json',site).pathname],{encoding:'utf8',env}); assert.notEqual(result.status,0);
+    await writeFile(fake,'#!/usr/bin/env node\nprocess.stdout.write("invalid")\n');
+    result=spawnSync(process.execPath,[script,'--out',join(dir,'invalid.json')],{encoding:'utf8',env}); assert.notEqual(result.status,0);
+  } finally {await rm(dir,{recursive:true,force:true});}
+});
+
+test('catalog editor saves through admin RPC, handles conflicts and clears on sign-out', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[];
+  const session={user:{id:'admin-1',email:'admin@example.test'}}; let auth, conflict=false;
+  const current=structuredClone(fullData);
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},
+    rpc:async(name,args)=>{
+      calls.push({name,args});
+      if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
+      if(name==='studio_premium_catalog') return {data:[{catalog:structuredClone(current),playbooks:fullPlaybooks}]};
+      if(name==='studio_admin_update_catalog_review') {
+        if(conflict) { current.skills.find(x=>x.name===args.item_name).description_fa='تغییر دستگاه دیگر'; return {error:{code:'40001'}}; }
+        Object.assign(current[args.kind].find(x=>x.name===args.item_name),{description_fa:args.description,level:args.level}); return {error:null};
+      }
+      return {data:[],error:null};},
+    from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#adminContent').hidden && $('#catalogReviewItem option[value="synthetic-premium-tool"]'));
+    $('#catalogReviewItem').value='synthetic-premium-tool'; $('#catalogReviewItem').dispatchEvent(new w.Event('change'));
+    assert.equal($('#catalogReviewDescription').value,'ابزار آزمایشی داده');
+    $('#catalogReviewDescription').value='توضیح تازه'; $('#catalogReviewLevel').value='advanced';
+    $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    await waitFor(()=>$('#catalogReviewStatus').textContent.includes('ذخیره شد'));
+    const call=calls.find(c=>c.name==='studio_admin_update_catalog_review');
+    assert.equal(call.args.item_name,'synthetic-premium-tool'); assert.equal(call.args.previous_description,'ابزار آزمایشی داده'); assert.equal(call.args.previous_level,'beginner');
+    assert.equal(w.studioCatalog.catalog.skills.find(x=>x.name==='synthetic-premium-tool').description_fa,'توضیح تازه');
+    conflict=true; $('#catalogReviewDescription').value='نباید ذخیره شود'; $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    await waitFor(()=>$('#catalogReviewStatus').textContent.includes('هم‌زمان تغییر'));
+    assert.equal($('#catalogReviewDescription').value,'تغییر دستگاه دیگر');
+    auth('SIGNED_OUT',null); assert.equal($('#catalogReviewDescription').value,''); assert.equal($('#catalogReviewItem').children.length,0); assert.equal($('#catalogReviewSave').disabled,true);
+    await delay(50);
+  } finally {dom.window.close();}
+});
+
+test('pending catalog edits are locked, errors are visible, and late results cannot leak across accounts', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let auth, resolveSave, saves=0;
+  const session={user:{id:'admin-1',email:'admin@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},
+    rpc:async(name)=>{
+      if(name==='studio_my_account') return {data:[{is_admin:true,plan:'free'}]};
+      if(name==='studio_premium_catalog') return {data:[{catalog:structuredClone(fullData),playbooks:fullPlaybooks}]};
+      if(name==='studio_admin_update_catalog_review') { saves++; return new Promise(resolve=>{resolveSave=resolve;}); }
+      return {data:[],error:null};},
+    from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    await waitFor(()=>!$('#adminContent').hidden && $('#catalogReviewItem option[value="synthetic-premium-tool"]'));
+    $('#catalogReviewItem').value='synthetic-premium-tool'; $('#catalogReviewItem').dispatchEvent(new w.Event('change'));
+    $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    assert.equal($('#catalogReviewItem').disabled,true); assert.equal($('#catalogReviewDescription').disabled,true);
+    $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true})); assert.equal(saves,1);
+    resolveSave({error:{message:'network error'}}); await waitFor(()=>!$('#catalogReviewSave').disabled); assert.ok($('#catalogReviewStatus').textContent);
+    $('#catalogReviewForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true})); assert.equal(saves,2);
+    auth('SIGNED_OUT',null); assert.equal($('#adminContent').hidden,true); resolveSave({error:null}); await delay(50);
+    assert.equal(w.studioCatalog,null); assert.equal($('#catalogReviewDescription').value,''); assert.equal($('#catalogReviewSave').disabled,true);
+  } finally {dom.window.close();}
+});

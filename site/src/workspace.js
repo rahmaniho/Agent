@@ -72,7 +72,7 @@ if (window.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches && !windo
   }, {passive:true});
   gate.addEventListener('pointerleave', () => { for (const key of ['--sphere-x','--sphere-y','--card-x','--card-y','--glow-x','--glow-y']) gate.style.removeProperty(key); });
 }
-let accountGeneration = 0, adminRows = [], expiryTimer, projectGeneration = 0, adminPurchaseGeneration = 0, adminPurchaseOffset = 0;
+let accountGeneration = 0, adminRows = [], expiryTimer, projectGeneration = 0, adminPurchaseGeneration = 0, adminPurchaseOffset = 0, catalogEditorAdmin = false, catalogReviewBusy = false;
 function publishCatalog(payload) {
   window.studioCatalog = payload;
   window.dispatchEvent(new CustomEvent('studio:catalog', {detail: payload}));
@@ -250,12 +250,76 @@ function drawAdmin() {
     actions.append(date, plus, free, history); tr.append(actions); body.append(tr);
   });
 }
+function catalogReviewControls(busy) {
+  catalogReviewBusy=busy;
+  for (const id of ['catalogReviewKind','catalogReviewSearch','catalogReviewMissing','catalogReviewItem','catalogReviewDescription','catalogReviewLevel']) $(`#${id}`).disabled=busy;
+  $('#catalogReviewSave').disabled=busy || !currentReviewItem();
+}
+function clearCatalogEditor() {
+  catalogEditorAdmin=false; catalogReviewControls(false); $('#catalogReviewItem').replaceChildren(); $('#catalogReviewDescription').value=''; $('#catalogReviewOriginal').textContent='';
+  $('#catalogReviewSummary').textContent=''; $('#catalogReviewStatus').textContent=''; $('#catalogReviewSave').disabled=true;
+}
+function currentReviewItem() {
+  if (!catalogEditorAdmin) return null;
+  const kind=$('#catalogReviewKind').value, name=$('#catalogReviewItem').value;
+  return window.studioCatalog?.catalog?.[kind]?.find(item => item.name===name) || null;
+}
+function showCatalogReviewItem() {
+  const item=currentReviewItem();
+  $('#catalogReviewDescription').value=item?.description_fa || '';
+  $('#catalogReviewLevel').value=['beginner','advanced','unknown'].includes(item?.level) ? item.level : 'unknown';
+  $('#catalogReviewOriginal').textContent=item?.desc || '';
+  $('#catalogReviewSave').disabled=catalogReviewBusy || !item;
+}
+function renderCatalogEditor(preferredName) {
+  const select=$('#catalogReviewItem'), prior=preferredName || select.value, kind=$('#catalogReviewKind').value;
+  select.replaceChildren();
+  if (!catalogEditorAdmin || !Array.isArray(window.studioCatalog?.catalog?.[kind])) { $('#catalogReviewSummary').textContent='کاتالوگ محافظت‌شده در دسترس نیست.'; showCatalogReviewItem(); return; }
+  const items=window.studioCatalog.catalog[kind], missing=$('#catalogReviewMissing').checked;
+  const q=$('#catalogReviewSearch').value.trim().toLocaleLowerCase();
+  const filtered=items.filter(item=>typeof item?.name==='string' && (!missing || !String(item.description_fa || '').trim()) && (!q || `${item.name} ${item.desc || ''} ${item.description_fa || ''}`.toLocaleLowerCase().includes(q)));
+  for (const item of filtered) { const option=document.createElement('option'); option.value=item.name; option.textContent=`${item.name} ${item.description_fa ? '✓' : '—'}`; select.append(option); }
+  if(filtered.some(item=>item.name===prior)) select.value=prior; else select.selectedIndex=filtered.length ? 0 : -1;
+  const unreviewed=items.filter(item=>!String(item.description_fa || '').trim()).length;
+  $('#catalogReviewSummary').textContent=`${faNumber(filtered.length)} مورد در فهرست؛ ${faNumber(unreviewed)} مورد بدون توضیح فارسی ذخیره‌شده در کاتالوگ.`;
+  showCatalogReviewItem();
+}
+$('#catalogReviewKind').addEventListener('change',()=>renderCatalogEditor());
+$('#catalogReviewSearch').addEventListener('input',()=>renderCatalogEditor());
+$('#catalogReviewMissing').addEventListener('change',()=>renderCatalogEditor());
+$('#catalogReviewItem').addEventListener('change',showCatalogReviewItem);
+$('#catalogReviewForm').addEventListener('submit',async event=>{
+  event.preventDefault();
+  if (catalogReviewBusy) return;
+  const item=currentReviewItem(), who=user?.id, generation=accountGeneration;
+  const description=$('#catalogReviewDescription').value.trim(), level=$('#catalogReviewLevel').value, kind=$('#catalogReviewKind').value;
+  if(!item || !who || !catalogEditorAdmin || !description) { $('#catalogReviewStatus').textContent='یک ابزار و توضیح فارسی معتبر انتخاب کنید.'; return; }
+  catalogReviewControls(true); $('#catalogReviewStatus').textContent='در حال ذخیره بازبینی...';
+  try {
+    const result=await supabase.rpc('studio_admin_update_catalog_review',{kind,item_name:item.name,description,level,previous_description:item.description_fa ?? null,previous_level:item.level ?? null});
+    if(generation!==accountGeneration || user?.id!==who) return;
+    if(result.error) {
+      if(result.error.code==='40001') {
+        const fresh=await supabase.rpc('studio_premium_catalog');
+        if(generation!==accountGeneration || user?.id!==who) return;
+        if(!fresh.error && fresh.data?.[0]?.catalog && fresh.data[0].playbooks?.services) { publishCatalog(fresh.data[0]); renderCatalogEditor(item.name); $('#catalogReviewStatus').textContent='این ابزار هم‌زمان تغییر کرده است؛ نسخهٔ تازه بارگذاری شد. تغییرات خود را دوباره وارد کنید.'; }
+        else $('#catalogReviewStatus').textContent='این ابزار تغییر کرده و دریافت نسخهٔ تازه ممکن نشد؛ صفحه را بازخوانی کنید.';
+      } else report($('#catalogReviewStatus'),result.error);
+      return;
+    }
+    const payload=window.studioCatalog, updated=payload.catalog[kind].map(entry=>entry.name===item.name?{...entry,description_fa:description,level}:entry);
+    publishCatalog({...payload,catalog:{...payload.catalog,[kind]:updated}});
+    renderCatalogEditor(item.name); $('#catalogReviewStatus').textContent='توضیح و سطح ذخیره شد؛ برای محافظت از تغییرات، پشتیبان خصوصی تازه تهیه کنید.';
+  } catch { if(generation===accountGeneration && user?.id===who) $('#catalogReviewStatus').textContent='ذخیره ممکن نشد؛ اتصال را بررسی کنید.'; }
+  finally { if(generation===accountGeneration) catalogReviewControls(false); }
+});
 $('#adminSearch').addEventListener('input', drawAdmin);
 $('#adminPurchaseFilter').addEventListener('change', () => { adminPurchaseOffset=0; if (!$('#adminContent').hidden) loadAdminPurchases(accountGeneration); });
 $('#adminPurchasesPrev').addEventListener('click', () => { adminPurchaseOffset=Math.max(0,adminPurchaseOffset-50); loadAdminPurchases(accountGeneration); });
 $('#adminPurchasesNext').addEventListener('click', () => { adminPurchaseOffset+=50; loadAdminPurchases(accountGeneration); });
 async function refreshAccount() {
   const generation = ++accountGeneration;
+  clearCatalogEditor();
   $('#adminContent').hidden = true; adminRows = []; $('#adminUsers').replaceChildren(); $('#adminPurchases').replaceChildren();
   if (!user) { $('#accountReminder').textContent = ''; $('#accountExpiry').textContent = ''; resetPremium(); $('#adminStatus').textContent = 'برای بررسی دسترسی، وارد حساب خود شوید.'; $('#accountPlan').textContent = '—'; return; }
   $('#accountPlan').textContent = 'در حال بررسی...';
@@ -289,7 +353,7 @@ async function refreshAccount() {
   adminRows = result.data || [];
   $('#adminUserCount').textContent = faNumber(adminRows.length);
   $('#adminPlusCount').textContent = faNumber(adminRows.filter(r => r.plan === 'plus' && new Date(r.expires_at) > new Date()).length);
-  $('#adminContent').hidden = false; $('#adminStatus').textContent = 'فهرست حساب‌ها آماده است.'; drawAdmin(); await loadAdminPurchases(generation);
+  $('#adminContent').hidden = false; $('#adminStatus').textContent = 'فهرست حساب‌ها آماده است.'; catalogEditorAdmin=true; renderCatalogEditor(); drawAdmin(); await loadAdminPurchases(generation);
 }
 
 function noteControls() {
@@ -420,7 +484,7 @@ window.addEventListener('studio:projects-open',loadProjects);
 function updateSession(session) {
   const previous = user?.id;
   user = session?.user || null;
-  if (previous !== user?.id) { ++accountGeneration; adminPurchaseOffset=0; resetPremium(); }
+  if (previous !== user?.id) { ++accountGeneration; adminPurchaseOffset=0; clearCatalogEditor(); $('#adminContent').hidden=true; adminRows=[]; $('#adminUsers').replaceChildren(); $('#adminPurchases').replaceChildren(); resetPremium(); }
   $('#purchaseFields').disabled = !user; $('#purchaseLogin').hidden = !!user;
   $('#projectLoginNotice').hidden = !!user; $('#projectCreate').disabled = !user; $('#projectRefresh').disabled = !user;
   if (previous && previous !== user?.id) { $('#projectTitle').value=''; $('#projectDescription').value=''; }
