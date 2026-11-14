@@ -125,3 +125,90 @@ test('empty projects and exactly 100 results are distinguished without inventing
   count = 101;
   assert.equal((await get(base + '/api/v1/projects', 'token-a')).status, 503);
 });
+
+const projectA='11111111-1111-4111-8111-111111111111';
+const projectB='22222222-2222-4222-8222-222222222222';
+const scopedProjects={
+  [projectA]:{id:projectA,user_id:userA,title:'پروژه الف',description:'',project_type:'website',checklist:[],version:3,updated_at:'2026-11-13T12:00:00Z'},
+  [projectB]:{id:projectB,user_id:userB,title:'پروژه ب',description:'',project_type:'website',checklist:[],version:1,updated_at:'2026-11-13T12:00:00Z'},
+};
+function scopedSupabase(calls) {
+  return async (url,init)=>{
+    const parsed=new URL(url); calls.push({url:parsed,...init});
+    const who=tokens[init.headers.authorization.slice(7)]; if(!who) return json({},401);
+    if(parsed.pathname==='/auth/v1/user') return json({id:who});
+    const id=parsed.searchParams.get('id')?.slice(3), owner=parsed.searchParams.get('user_id')?.slice(3), row=scopedProjects[id];
+    return json(row && row.user_id===who && owner===who ? [row] : []);
+  };
+}
+const postPlan=(base,id,token,body,headers={})=>fetch(`${base}/api/v1/projects/${id}/plan-validation`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...headers},body:typeof body==='string'?body:JSON.stringify(body)});
+const proposal=()=>({project_version:3,tasks:[{id:'build',title:'ساخت',weight:3,depends_on:['design']},{id:'design',title:'طراحی',weight:1,depends_on:[]}]});
+
+test('project detail binds the verified user to the object query and hides other owners', async t=>{
+  const calls=[],base=await withApp(t,scopedSupabase(calls));
+  const own=await get(`${base}/api/v1/projects/${projectA}`,'token-a');
+  assert.equal(own.status,200); const detail=await own.json(); assert.equal(detail.project.id,projectA); assert.equal(detail.project.title,'پروژه الف'); assert.equal('user_id' in detail.project,false);
+  const query=calls.find(call=>call.url.pathname==='/rest/v1/studio_projects');
+  assert.equal(query.url.searchParams.get('id'),`eq.${projectA}`); assert.equal(query.url.searchParams.get('user_id'),`eq.${userA}`);
+  assert.equal(query.headers.authorization,'Bearer token-a');
+  assert.equal((await get(`${base}/api/v1/projects/${projectB}`,'token-a')).status,404);
+  assert.equal((await get(`${base}/api/v1/projects/${projectA}`,'token-b')).status,404);
+  assert.equal((await get(`${base}/api/v1/projects/${projectA}`)).status,401);
+  assert.equal((await get(`${base}/api/v1/projects/11111111-1111-1111-1111-11111111111z`,'token-a')).status,404);
+});
+
+test('project detail fails closed if upstream returns a different owner or project', async t=>{
+  for(const row of [{...scopedProjects[projectA],user_id:userB},{...scopedProjects[projectA],id:projectB},{...scopedProjects[projectA],version:0}]) {
+    const base=await withApp(t,async url=>new URL(url).pathname==='/auth/v1/user'?json({id:userA}):json([row]));
+    const response=await get(`${base}/api/v1/projects/${projectA}`,'token-a');assert.equal(response.status,503);
+    assert.ok(!(await response.text()).includes('پروژه'));
+  }
+});
+
+test('plan validation checks RLS scope, task DAG and project version without creating a run', async t=>{
+  const calls=[],base=await withApp(t,scopedSupabase(calls));
+  const response=await postPlan(base,projectA,'token-a',proposal());assert.equal(response.status,200);
+  assert.deepEqual((await response.json()).validation,{valid:true,project_version:3,task_count:2,total_weight:4,topological_order:['design','build'],project_id:projectA});
+  assert.equal(response.headers.get('cache-control'),'no-store');
+  assert.equal((await postPlan(base,projectA,'token-b',proposal())).status,404);
+  assert.equal((await postPlan(base,projectB,'token-a',proposal())).status,404);
+  const stale=proposal();stale.project_version=2;assert.equal((await postPlan(base,projectA,'token-a',stale)).status,409);
+  const cyclic=proposal();cyclic.tasks[1].depends_on=['build'];const bad=await postPlan(base,projectA,'token-a',cyclic);
+  assert.equal(bad.status,422);assert.equal((await bad.json()).error.issue,'tasks.cycle');
+  const forged=proposal();forged.tasks[0].status='succeeded';assert.equal((await postPlan(base,projectA,'token-a',forged)).status,422);
+  assert.ok(calls.every(call=>call.method==='GET')); // No model, mutation, or worker invocation.
+});
+
+test('plan API rejects unsupported media, malformed or oversized bodies and wrong methods', async t=>{
+  const calls=[],base=await withApp(t,scopedSupabase(calls));
+  assert.equal((await postPlan(base,projectA,'token-a','{}',{'content-type':'text/plain'})).status,415);
+  assert.equal((await postPlan(base,projectA,'token-a','{}',{'content-encoding':'gzip'})).status,415);
+  assert.equal((await postPlan(base,projectA,'token-a',' '.repeat(65537))).status,413);
+  assert.equal(calls.length,0);
+  assert.equal((await postPlan(base,projectA,'token-a','{broken')).status,400);
+  assert.equal((await get(`${base}/api/v1/projects/${projectA}/plan-validation`,'token-a')).status,405);
+  assert.equal((await fetch(`${base}/api/v1/projects/${projectA}`,{method:'POST'})).status,405);
+});
+
+test('plan validation bounds chunked request bodies', async t=>{
+  const {request}=await import('node:http'),calls=[],base=await withApp(t,scopedSupabase(calls));
+  const code=await new Promise((resolve,reject)=>{
+    const req=request(`${base}/api/v1/projects/${projectA}/plan-validation`,{method:'POST',headers:{authorization:'Bearer token-a','content-type':'application/json','transfer-encoding':'chunked'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});
+    req.on('error',reject);req.write('x'.repeat(40000));req.end('x'.repeat(30000));
+  });
+  assert.equal(code,413);
+});
+
+test('disconnect during authentication does not continue to project data', async t=>{
+  const {request}=await import('node:http');let resolveAuth, databaseCalls=0;
+  const base=await withApp(t,(url)=>{
+    if(new URL(url).pathname==='/auth/v1/user') return new Promise(resolve=>{resolveAuth=resolve;});
+    databaseCalls++;return json([]);
+  });
+  const req=request(`${base}/api/v1/projects/${projectA}/plan-validation`,{method:'POST',headers:{authorization:'Bearer token-a','content-type':'application/json','transfer-encoding':'chunked'}});
+  req.on('error',()=>{});req.write('{');
+  for(let i=0;i<50 && !resolveAuth;i++) await new Promise(resolve=>setTimeout(resolve,5));
+  assert.equal(typeof resolveAuth,'function');req.destroy();await new Promise(resolve=>setTimeout(resolve,30));resolveAuth(json({id:userA}));
+  await new Promise(resolve=>setTimeout(resolve,30));assert.equal(databaseCalls,0);
+  assert.equal((await get(`${base}/api/v1/health`)).status,200);
+});

@@ -1,9 +1,11 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { validatePlanProposal } from './plan-validation.mjs';
 
 // Allows 100 valid legacy projects (including checklist and description limits),
 // while bounding memory consumed by an unexpected upstream response.
 const MAX_UPSTREAM_BYTES = 4 * 1024 * 1024;
+const MAX_REQUEST_BYTES = 64 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Deliberately accepts only the public publishable key, not service-role or secret keys.
@@ -32,6 +34,31 @@ async function readJsonBounded(response) {
     }
   } finally { reader.releaseLock(); }
   return JSON.parse(Buffer.concat(parts.map(part => Buffer.from(part))).toString('utf8'));
+}
+
+// Bound memory while reading even when Transfer-Encoding: chunked is used.
+function readRequestJson(req) {
+  return new Promise(resolve => {
+    if (req.aborted || req.destroyed) return resolve({ invalid: true });
+    const chunks = []; let size = 0, finished = false;
+    const finish = value => {
+      if (finished) return; finished = true;
+      req.removeListener('data', onData); req.removeListener('end', onEnd);
+      req.removeListener('error', onError); req.removeListener('aborted', onError);
+      resolve(value);
+    };
+    const onData = chunk => {
+      size += chunk.length;
+      if (size > MAX_REQUEST_BYTES) { finish({ tooLarge: true }); req.resume(); return; }
+      chunks.push(chunk);
+    };
+    const onEnd = () => {
+      try { finish({ value: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))) }); }
+      catch { finish({ invalid: true }); }
+    };
+    const onError = () => finish({ invalid: true });
+    req.on('data', onData); req.once('end', onEnd); req.once('error', onError); req.once('aborted', onError);
+  });
 }
 
 function send(res, code, data, id, extra = {}) {
@@ -67,26 +94,68 @@ export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 50
   }
 
   const server = createServer(async (req, res) => {
+    // A client can disconnect while authentication or the RLS lookup is in flight.
+    req.on('error', () => {});
     const id = randomUUID();
     const fail = (status, code, extra) => send(res, status, { error: { code, request_id: id } }, id, extra);
     try {
-      // No parameters or mutations are accepted by the first version of this boundary.
+      // Only exact allowlisted paths, with no query parameters or cookies as credentials.
       if (!req.url?.startsWith('/') || req.url.includes('?') || req.url.includes('#')) return fail(400, 'invalid_request');
       const path = req.url;
-      const routes = ['/api/v1/health', '/api/v1/me', '/api/v1/projects'];
-      if (!routes.includes(path)) return fail(404, 'not_found');
-      if (req.method !== 'GET') return fail(405, 'method_not_allowed', { Allow: 'GET' });
-      if (req.headers['transfer-encoding'] || (req.headers['content-length'] && req.headers['content-length'] !== '0')) return fail(400, 'invalid_request');
+      const projectMatch = /^\/api\/v1\/projects\/([0-9a-f-]{36})(\/plan-validation)?$/i.exec(path);
+      if (projectMatch && !UUID.test(projectMatch[1])) return fail(404, 'not_found');
+      const isPlan = !!projectMatch?.[2], isProject = !!projectMatch;
+      if (!isProject && !['/api/v1/health', '/api/v1/me', '/api/v1/projects'].includes(path)) return fail(404, 'not_found');
+      const allowedMethod = isPlan ? 'POST' : 'GET';
+      if (req.method !== allowedMethod) return fail(405, 'method_not_allowed', { Allow: allowedMethod });
+      if (!isPlan && (req.headers['transfer-encoding'] || (req.headers['content-length'] && req.headers['content-length'] !== '0'))) return fail(400, 'invalid_request');
+      if (isPlan) {
+        if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(req.headers['content-type'] || '') ||
+            (req.headers['content-encoding'] && req.headers['content-encoding'].toLowerCase() !== 'identity')) return fail(415, 'unsupported_media_type');
+        const length = req.headers['content-length'];
+        if (length && (!/^\d+$/.test(length) || Number(length) > MAX_REQUEST_BYTES)) {
+          req.resume(); return fail(413, 'request_too_large', { Connection: 'close' });
+        }
+      }
       if (path === '/api/v1/health') return send(res, 200, { status: 'ok' }, id);
       const token = bearer(req);
       if (!token) return fail(401, 'unauthorized');
       // Auth server validates the token online; we do not trust client-decoded claims.
       const auth = await upstream('/auth/v1/user', token);
+      if (req.aborted || res.destroyed) return;
       if (auth.status === 401 || auth.status === 403) return fail(401, 'unauthorized');
       if (!auth.ok) return fail(503, 'identity_unavailable');
       const user = await readJsonBounded(auth);
       if (!user || typeof user.id !== 'string' || !UUID.test(user.id)) return fail(503, 'identity_unavailable');
       if (path === '/api/v1/me') return send(res, 200, { id: user.id }, id);
+      if (isProject) {
+        const projectId = projectMatch[1].toLowerCase(), ownerId = user.id.toLowerCase();
+        const query = new URLSearchParams({ select: 'id,user_id,title,description,project_type,checklist,version,updated_at',
+          id: `eq.${projectId}`, user_id: `eq.${ownerId}`, limit: '1' });
+        // Enforce the currently supported single-owner model as well as database RLS.
+        const response = await upstream(`/rest/v1/studio_projects?${query}`, token);
+        if (req.aborted || res.destroyed) return;
+        if (response.status === 401 || response.status === 403) return fail(403, 'access_denied');
+        if (!response.ok) return fail(503, 'projects_unavailable');
+        const rows = await readJsonBounded(response);
+        if (!Array.isArray(rows) || rows.length > 1) return fail(503, 'projects_unavailable');
+        if (!rows.length) return fail(404, 'not_found');
+        const project = rows[0];
+        if (!project || typeof project.id !== 'string' || project.id.toLowerCase() !== projectId ||
+            typeof project.user_id !== 'string' || project.user_id.toLowerCase() !== ownerId ||
+            !Number.isSafeInteger(project.version) || project.version < 1) return fail(503, 'projects_unavailable');
+        if (!isPlan) {
+          const { id: project_id, title, description, project_type, checklist, version, updated_at } = project;
+          return send(res, 200, { project: { id: project_id, title, description, project_type, checklist, version, updated_at } }, id);
+        }
+        const body = await readRequestJson(req);
+        if (body.tooLarge) return fail(413, 'request_too_large', { Connection: 'close' });
+        if (body.invalid) return fail(400, 'invalid_json');
+        const validation = validatePlanProposal(body.value);
+        if (!validation.valid) return send(res, 422, { error: { code: 'invalid_plan', issue: validation.issue, request_id: id } }, id);
+        if (validation.project_version !== project.version) return fail(409, 'project_version_conflict');
+        return send(res, 200, { validation: { ...validation, project_id: projectId } }, id);
+      }
       // Forward the USER token, never a service-role key: PostgREST enforces RLS.
       const query = new URLSearchParams({ select: 'id,title,description,project_type,checklist,version,updated_at', order: 'updated_at.desc,id.desc', limit: '100' });
       const projects = await upstream(`/rest/v1/studio_projects?${query}`, token);

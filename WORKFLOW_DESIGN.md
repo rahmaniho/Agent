@@ -17,3 +17,7 @@ approval به digest دقیق عمل، scope، actor، revision و expiry بست
 ## آزمون‌های لازم
 
 DAG cycle/tenant، هم‌زمانی start/stop، lease timeout/fencing، تکرار و crash در هر نقطهٔ تراکنش، failure network، retry مبهم، approval تکراری/منقضی/تغییر یافته، بودجهٔ هم‌زمان، ordering/replay، pause/cancel و محاسبهٔ وزن/طرح خالی. شواهد و تست‌های عملی در `TEST_REPORT.md` جدا از این فهرست است.
+
+## اعتبارسنجی اولیهٔ آزمایشی
+
+`server/plan-validation.mjs` و endpoint محلی آن، taskهای ارائه‌شده را از نظر شناسه، وزن، وابستگی داخلی و DAG اعتبارسنجی و ترتیب توپولوژیک قطعی برمی‌گردانند. این فقط یک بررسی در حافظه است؛ هیچ plan پایدار، مدل، run، execution، تأیید یا پیشرفت ایجاد نمی‌کند. قبل از استفاده برای activation به ذخیرهٔ تراکنشی، بررسی مجوز و نسخه در لحظهٔ commit، بودجه و سایر کنترل‌های بالا نیاز است.
