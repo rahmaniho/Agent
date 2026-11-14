@@ -12,6 +12,7 @@ test('validates and orders user-supplied weighted tasks without implying executi
   assert.deepEqual(validatePlanProposal(plan()), { valid:true,project_version:3,task_count:3,total_weight:6,topological_order:['design','build','review'] });
   const independent={project_version:1,tasks:[{id:'b',title:'ب',weight:1,depends_on:[]},{id:'a',title:'الف',weight:1,depends_on:[]}]};
   assert.deepEqual(validatePlanProposal(independent).topological_order,['b','a']);
+  assert.equal(validatePlanProposal({project_version:1,tasks:[{id:'x',title:'😀'.repeat(100),weight:1,depends_on:[]}]}).valid,true);
 });
 
 test('rejects missing, duplicate, unknown, cyclic and self dependencies', () => {
@@ -27,6 +28,10 @@ test('rejects extra control fields, malformed payloads and out-of-range values',
     {project_version:1,tasks:Array(101).fill(null)}, {...plan(),status:'running'},
     {...plan(),tasks:[{...plan().tasks[0],status:'completed'}]},
     {...plan(),tasks:[{id:'x',title:' ',weight:1,depends_on:[]}]},
+    {...plan(),tasks:[{id:'x',title:'\u00a0',weight:1,depends_on:[]}]},
+    {...plan(),tasks:[{id:'x',title:'\u0000',weight:1,depends_on:[]}]},
+    {...plan(),tasks:[{id:'x',title:'\ud800',weight:1,depends_on:[]}]},
+    {...plan(),tasks:[{id:'x',title:'😀'.repeat(101),weight:1,depends_on:[]}]},
     {...plan(),tasks:[{id:'x',title:'x',weight:0,depends_on:[]}]},
     {...plan(),tasks:[{id:'x',title:'x',weight:1001,depends_on:[]}]},
     {...plan(),tasks:[{id:'bad.id',title:'x',weight:1,depends_on:[]}]},

@@ -46,3 +46,7 @@
 ## اعتبارسنجی طرح و جزئیات پروژه در API محلی
 
 `node --test server/*.test.mjs`: ۱۶ تست موفق، از جمله دو هویت ساختگی، کنترل owner و RLS mock، نسخهٔ قدیمی، DAG/چرخه و وزن، فیلد اضافی، بدنهٔ بزرگ عادی و chunked و قطع ارتباط در حین Auth. هیچ مدل، سرویس پایگاه واقعی یا backend مستقر در این آزمون‌ها فراخوانی نشده است. این بررسی جای تست نفوذ، rate limit، آزمون Supabase واقعی و امنیت production را نمی‌گیرد.
+
+## revision طرح دستی — آزمون محلی
+
+`node --test server/*.test.mjs`: ۲۱ تست موفق با upstream mock؛ `npm test --prefix site`: ۶۲ تست موفق شامل ۵ تست PostgreSQL/سازندهٔ درخواست، به‌علاوهٔ تست bridge. build و `git diff --check` نیز موفق بودند. تست‌های API ذخیره/خواندن مالک، ورودی نامعتبر و stale، پاسخ نامعتبر و commit مبهم بدون retry را بررسی می‌کنند. PGlite اعتبارسنجی DB، هویت شبیه‌سازی‌شدهٔ دو مالک، منع mutation مستقیم و ناشناس، DAG/Unicode، conflict، محدودیت ۲۰۰ و cascade را بررسی می‌کند. دو درخواست `Promise.all` روی یک اتصال PGlite اثبات هم‌زمانی واقعی دو اتصال نیست. هیچ آزمون Supabase/PostgREST واقعی، migration زنده، آزمون نفوذ، بازیابی backup کامل یا deploy انجام نشده است.

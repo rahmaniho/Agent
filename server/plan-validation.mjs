@@ -6,7 +6,7 @@ const MAX_DEPENDENCIES = 50;
 function record(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function hasOnly(value, keys) { return Object.keys(value).every(key => keys.includes(key)); }
 
-export function validatePlanProposal(proposal) {
+export function validatePlanProposal(proposal, { stored = false } = {}) {
   const invalid = path => ({ valid: false, issue: path });
   if (!record(proposal) || !hasOnly(proposal, ['project_version', 'tasks'])) return invalid('proposal');
   if (!Number.isSafeInteger(proposal.project_version) || proposal.project_version < 1 || proposal.project_version > 2147483647) return invalid('project_version');
@@ -16,13 +16,17 @@ export function validatePlanProposal(proposal) {
     const task = proposal.tasks[i], path = `tasks[${i}]`;
     if (!record(task) || !hasOnly(task, ['id', 'title', 'weight', 'depends_on'])) return invalid(path);
     if (typeof task.id !== 'string' || !TASK_ID.test(task.id) || byId.has(task.id)) return invalid(`${path}.id`);
-    if (typeof task.title !== 'string' || !task.title.trim() || task.title.length > 200) return invalid(`${path}.title`);
+    if (typeof task.title !== 'string' || !task.title.trim() || task.title.length > 200 ||
+        !task.title.isWellFormed() || task.title.includes('\u0000')) return invalid(`${path}.title`);
     if (!Number.isSafeInteger(task.weight) || task.weight < 1 || task.weight > 1000) return invalid(`${path}.weight`);
     if (!Array.isArray(task.depends_on) || task.depends_on.length > MAX_DEPENDENCIES ||
         task.depends_on.some(id => typeof id !== 'string' || !TASK_ID.test(id)) ||
         new Set(task.depends_on).size !== task.depends_on.length) return invalid(`${path}.depends_on`);
     byId.set(task.id, task);
   }
+  // Writes leave room for PostgreSQL JSONB formatting. Direct RPC callers can
+  // store larger valid documents, so reads must accept the database limit.
+  if (Buffer.byteLength(JSON.stringify(proposal.tasks), 'utf8') > (stored ? 64000 : 55000)) return invalid('tasks');
   for (let i = 0; i < proposal.tasks.length; i++) {
     const task = proposal.tasks[i];
     if (task.depends_on.some(id => id === task.id || !byId.has(id))) return invalid(`tasks[${i}].depends_on`);

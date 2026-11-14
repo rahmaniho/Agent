@@ -83,10 +83,11 @@ function bearer(req) {
 
 export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 5000 } = {}) {
   const { base, publishableKey } = validateConfig(config);
-  async function upstream(path, token) {
+  async function upstream(path, token, { method = 'GET', body } = {}) {
     const response = await fetchImpl(`${base}${path}`, {
-      method: 'GET',
-      headers: { apikey: publishableKey, authorization: `Bearer ${token}`, accept: 'application/json' },
+      method,
+      headers: { apikey: publishableKey, authorization: `Bearer ${token}`, accept: 'application/json', ...(method === 'POST' ? { 'content-type': 'application/json' } : {}) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       redirect: 'error',
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -102,14 +103,16 @@ export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 50
       // Only exact allowlisted paths, with no query parameters or cookies as credentials.
       if (!req.url?.startsWith('/') || req.url.includes('?') || req.url.includes('#')) return fail(400, 'invalid_request');
       const path = req.url;
-      const projectMatch = /^\/api\/v1\/projects\/([0-9a-f-]{36})(\/plan-validation)?$/i.exec(path);
+      const projectMatch = /^\/api\/v1\/projects\/([0-9a-f-]{36})(\/(?:plan-validation|manual-plan))?$/i.exec(path);
       if (projectMatch && !UUID.test(projectMatch[1])) return fail(404, 'not_found');
-      const isPlan = !!projectMatch?.[2], isProject = !!projectMatch;
+      const kind = projectMatch?.[2]?.toLowerCase() || '', isProject = !!projectMatch;
+      const isValidation = kind === '/plan-validation', isManualPlan = kind === '/manual-plan';
       if (!isProject && !['/api/v1/health', '/api/v1/me', '/api/v1/projects'].includes(path)) return fail(404, 'not_found');
-      const allowedMethod = isPlan ? 'POST' : 'GET';
-      if (req.method !== allowedMethod) return fail(405, 'method_not_allowed', { Allow: allowedMethod });
-      if (!isPlan && (req.headers['transfer-encoding'] || (req.headers['content-length'] && req.headers['content-length'] !== '0'))) return fail(400, 'invalid_request');
-      if (isPlan) {
+      const allowedMethods = isManualPlan ? ['GET', 'POST'] : isValidation ? ['POST'] : ['GET'];
+      if (!allowedMethods.includes(req.method)) return fail(405, 'method_not_allowed', { Allow: allowedMethods.join(', ') });
+      const hasJsonBody = req.method === 'POST';
+      if (!hasJsonBody && (req.headers['transfer-encoding'] || (req.headers['content-length'] && req.headers['content-length'] !== '0'))) return fail(400, 'invalid_request');
+      if (hasJsonBody) {
         if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(req.headers['content-type'] || '') ||
             (req.headers['content-encoding'] && req.headers['content-encoding'].toLowerCase() !== 'identity')) return fail(415, 'unsupported_media_type');
         const length = req.headers['content-length'];
@@ -144,17 +147,70 @@ export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 50
         if (!project || typeof project.id !== 'string' || project.id.toLowerCase() !== projectId ||
             typeof project.user_id !== 'string' || project.user_id.toLowerCase() !== ownerId ||
             !Number.isSafeInteger(project.version) || project.version < 1) return fail(503, 'projects_unavailable');
-        if (!isPlan) {
+        if (!kind) {
           const { id: project_id, title, description, project_type, checklist, version, updated_at } = project;
           return send(res, 200, { project: { id: project_id, title, description, project_type, checklist, version, updated_at } }, id);
+        }
+        if (isManualPlan && req.method === 'GET') {
+          const planQuery = new URLSearchParams({ select: 'project_id,user_id,revision,project_version,tasks,created_at',
+            project_id: `eq.${projectId}`, user_id: `eq.${ownerId}`, order: 'revision.desc', limit: '1' });
+          const planResponse = await upstream(`/rest/v1/studio_manual_plan_revisions?${planQuery}`, token);
+          if (req.aborted || res.destroyed) return;
+          if (planResponse.status === 401 || planResponse.status === 403) return fail(403, 'access_denied');
+          if (!planResponse.ok) return fail(503, 'manual_plans_unavailable');
+          const plans = await readJsonBounded(planResponse);
+          if (!Array.isArray(plans) || plans.length > 1) return fail(503, 'manual_plans_unavailable');
+          if (!plans.length) return send(res, 200, { plan: null, current_project_version: project.version }, id);
+          const plan = plans[0];
+          if (!plan || typeof plan.project_id !== 'string' || plan.project_id.toLowerCase() !== projectId ||
+              typeof plan.user_id !== 'string' || plan.user_id.toLowerCase() !== ownerId ||
+              !Number.isSafeInteger(plan.revision) || plan.revision < 1 || plan.revision > 200 ||
+              typeof plan.created_at !== 'string' || !Number.isFinite(Date.parse(plan.created_at)) ||
+              !validatePlanProposal({ project_version: plan.project_version, tasks: plan.tasks }, { stored: true }).valid) return fail(503, 'manual_plans_unavailable');
+          const { revision, project_version, tasks, created_at } = plan;
+          return send(res, 200, { plan: { revision, project_version, tasks, created_at },
+            current_project_version: project.version, stale: project_version !== project.version }, id);
         }
         const body = await readRequestJson(req);
         if (body.tooLarge) return fail(413, 'request_too_large', { Connection: 'close' });
         if (body.invalid) return fail(400, 'invalid_json');
-        const validation = validatePlanProposal(body.value);
+        let proposal = body.value, expectedRevision;
+        if (isManualPlan) {
+          if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal) ||
+              Object.keys(proposal).some(key => !['project_version', 'expected_revision', 'tasks'].includes(key)) ||
+              !Number.isSafeInteger(proposal.expected_revision) || proposal.expected_revision < 0 || proposal.expected_revision > 200)
+            return send(res, 422, { error: { code: 'invalid_plan', issue: 'expected_revision', request_id: id } }, id);
+          expectedRevision = proposal.expected_revision;
+          proposal = { project_version: proposal.project_version, tasks: proposal.tasks };
+        }
+        const validation = validatePlanProposal(proposal);
         if (!validation.valid) return send(res, 422, { error: { code: 'invalid_plan', issue: validation.issue, request_id: id } }, id);
         if (validation.project_version !== project.version) return fail(409, 'project_version_conflict');
-        return send(res, 200, { validation: { ...validation, project_id: projectId } }, id);
+        if (isValidation) return send(res, 200, { validation: { ...validation, project_id: projectId } }, id);
+        // No automatic retries: a timeout may follow a committed transaction.
+        let saveResponse;
+        try {
+          saveResponse = await upstream('/rest/v1/rpc/studio_save_manual_plan', token, { method: 'POST', body: {
+            target_project: projectId, expected_project_version: validation.project_version,
+            expected_revision: expectedRevision, tasks: proposal.tasks,
+          } });
+        } catch { if (!res.destroyed) return fail(503, 'plan_save_outcome_unknown'); return; }
+        if (req.aborted || res.destroyed) return;
+        if (saveResponse.status === 401 || saveResponse.status === 403) return fail(403, 'access_denied');
+        if (!saveResponse.ok) return fail(503, 'plan_save_outcome_unknown');
+        let result;
+        try { result = await readJsonBounded(saveResponse); } catch { return fail(503, 'plan_save_outcome_unknown'); }
+        if (!Array.isArray(result) || result.length !== 1 || typeof result[0]?.applied !== 'boolean') return fail(503, 'plan_save_outcome_unknown');
+        const saved = result[0];
+        if (!saved.applied) {
+          if (saved.reason === 'not_found') return fail(404, 'not_found');
+          if (['project_version_conflict', 'plan_revision_conflict', 'revision_limit'].includes(saved.reason)) return fail(409, saved.reason);
+          return fail(503, 'plan_save_outcome_unknown');
+        }
+        if (saved.reason !== 'saved' || !Number.isSafeInteger(saved.revision) || saved.revision !== expectedRevision + 1 || saved.revision > 200 ||
+            saved.project_version !== validation.project_version || typeof saved.created_at !== 'string' || !Number.isFinite(Date.parse(saved.created_at)))
+          return fail(503, 'plan_save_outcome_unknown');
+        return send(res, 201, { plan: { revision: saved.revision, project_version: saved.project_version, created_at: saved.created_at } }, id);
       }
       // Forward the USER token, never a service-role key: PostgREST enforces RLS.
       const query = new URLSearchParams({ select: 'id,title,description,project_type,checklist,version,updated_at', order: 'updated_at.desc,id.desc', limit: '100' });

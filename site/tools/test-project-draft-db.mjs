@@ -115,3 +115,58 @@ test('additive project CAS RPC enforces ownership, valid patches and atomic expe
   await actor(A); await db.query('update public.studio_projects set description=$1 where id=$2',['legacy writer',id]);
   assert.equal((await db.query('select description from public.studio_projects where id=$1',[id])).rows[0].description,'legacy writer');
 });
+
+test('manual plan revisions enforce owner, valid DAG and atomic version preconditions', async t=>{
+  const db=new PGlite();t.after(()=>db.close());
+  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    grant usage on schema auth to authenticated,anon; grant execute on function auth.uid() to authenticated,anon;
+    insert into auth.users values ('${A}'),('${B}');`);
+  const existing=(await readFile(new URL('../db/006_projects_review.sql',import.meta.url),'utf8')).split('alter table public.studio_purchase_requests')[0];
+  await db.exec(existing);await db.exec(await readFile(new URL('../db/011_manual_plan_revisions.sql',import.meta.url),'utf8'));
+  const id='00000000-0000-4000-8000-000000000011', other='00000000-0000-4000-8000-000000000012';
+  await db.exec(`insert into public.studio_projects(id,user_id,title,project_type) values ('${id}','${A}','A','website'),('${other}','${B}','B','website');`);
+  const actor=async who=>db.exec(`reset role;set role authenticated;set request.jwt.claim.sub='${who}';`);
+  const save=async (pid,pv,rev,tasks)=>(await db.query('select * from public.studio_save_manual_plan($1::uuid,$2::integer,$3::integer,$4::jsonb)',[pid,pv,rev,JSON.stringify(tasks)])).rows[0];
+  const list=async ()=>(await db.query('select project_id,user_id,revision,project_version,tasks from public.studio_manual_plan_revisions order by revision')).rows;
+  const plan=[{id:'build',title:'ساخت',weight:3,depends_on:['design']},{id:'design',title:'طراحی',weight:1,depends_on:[]}];
+  const {validatePlanProposal}=await import('../../server/plan-validation.mjs');
+  for(const tasks of [plan,[{id:'x',title:'😀'.repeat(100),weight:1,depends_on:[]}],
+    [{id:'x',title:'😀'.repeat(101),weight:1,depends_on:[]}],[{id:'x',title:'\u00a0',weight:1,depends_on:[]}],
+    [{id:'x',title:'x',weight:1,depends_on:['x']}],[]]) {
+    const sqlResult=await db.query('select public.studio_manual_plan_tasks_valid($1::jsonb) as valid',[JSON.stringify(tasks)]);
+    assert.equal(sqlResult.rows[0].valid,validatePlanProposal({project_version:1,tasks}).valid);
+  }
+  // Direct RPC accepts a valid JSONB document larger than the API's conservative write cap.
+  const large=[];for(let i=0;i<100;i++) large.push({id:'t'+String(i).padStart(2,'0')+'_'.repeat(27),title:'x'.repeat(160),weight:1,depends_on:large.slice(-11).map(t=>t.id)});
+  assert.ok(Buffer.byteLength(JSON.stringify(large))>55000);
+  assert.equal((await db.query('select public.studio_manual_plan_tasks_valid($1::jsonb) as valid',[JSON.stringify(large)])).rows[0].valid,true);
+  assert.equal(validatePlanProposal({project_version:1,tasks:large}).valid,false);
+  assert.equal(validatePlanProposal({project_version:1,tasks:large},{stored:true}).valid,true);
+  await actor(A);
+  assert.equal((await save(other,1,0,plan)).reason,'not_found');assert.equal((await list()).length,0);
+  const invalid=[[],[{...plan[0],status:'done'}],[{...plan[0],weight:0}], [{...plan[0],weight:1.5}],
+    [{...plan[0],depends_on:['build']}],[{...plan[0],depends_on:['missing']}],
+    [{...plan[0],depends_on:['design','design']},plan[1]],[{...plan[0]}, {...plan[1],depends_on:['build']}],
+    [plan[0],{...plan[1],id:'build'}],[{...plan[0],title:' \n\t'}],
+    [{id:'x',title:'\u00a0',weight:1,depends_on:[]}], [{id:'x',title:'😀'.repeat(101),weight:1,depends_on:[]}],Array(101).fill(plan[0])];
+  for(const bad of invalid) await assert.rejects(save(id,1,0,bad),/Invalid plan/);
+  const created=await save(id,1,0,plan);assert.equal(created.applied,true);assert.equal(created.revision,1);assert.equal(created.project_version,1);
+  assert.equal((await save(id,1,0,plan)).reason,'plan_revision_conflict');
+  await assert.rejects(db.query('update public.studio_manual_plan_revisions set tasks=$1',[JSON.stringify([])]),/permission denied/i);
+  await assert.rejects(db.query('delete from public.studio_manual_plan_revisions'),/permission denied/i);
+  await assert.rejects(db.query('insert into public.studio_manual_plan_revisions(project_id,user_id,revision,project_version,tasks) values ($1,$2,2,1,$3::jsonb)',[id,A,JSON.stringify(plan)]),/permission denied/i);
+  await actor(B);assert.equal((await list()).length,0);assert.equal((await save(id,1,1,plan)).reason,'not_found');
+  await actor(A); await db.query('update public.studio_projects set version=2 where id=$1',[id]);
+  assert.equal((await save(id,1,1,plan)).reason,'project_version_conflict');
+  const simultaneous=await Promise.all([save(id,2,1,plan),save(id,2,1,plan)]);assert.equal(simultaneous.filter(row=>row.applied).length,1);
+  assert.equal(simultaneous.filter(row=>row.reason==='plan_revision_conflict').length,1);
+  const rows=await list();assert.equal(rows.length,2);assert.equal(rows[0].project_version,1);assert.equal(rows[1].project_version,2);assert.deepEqual(rows[0].tasks,plan);
+  await assert.rejects(db.query('select public.studio_manual_plan_tasks_valid($1::jsonb)',[JSON.stringify(plan)]),/permission denied/i);
+  await actor('');await assert.rejects(save(id,2,2,plan),/Access denied/);assert.equal((await list()).length,0);
+  await db.exec("reset role;set role anon;set request.jwt.claim.sub='';");await assert.rejects(save(id,2,2,plan),/permission denied/i);
+  await actor(A);await db.query('delete from public.studio_projects where id=$1',[id]);assert.equal((await list()).length,0);
+  await db.exec('reset role');
+  await db.query('insert into public.studio_manual_plan_revisions(project_id,user_id,revision,project_version,tasks) select $1::uuid,$2::uuid,i,1,$3::jsonb from generate_series(1,200) i',[other,B,JSON.stringify(plan)]);
+  await actor(B);assert.equal((await save(other,1,200,plan)).reason,'revision_limit');assert.equal((await list()).length,200);
+});
