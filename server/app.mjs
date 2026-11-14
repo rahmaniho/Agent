@@ -103,12 +103,13 @@ export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 50
       // Only exact allowlisted paths, with no query parameters or cookies as credentials.
       if (!req.url?.startsWith('/') || req.url.includes('?') || req.url.includes('#')) return fail(400, 'invalid_request');
       const path = req.url;
-      const projectMatch = /^\/api\/v1\/projects\/([0-9a-f-]{36})(\/(?:plan-validation|manual-plan))?$/i.exec(path);
-      if (projectMatch && !UUID.test(projectMatch[1])) return fail(404, 'not_found');
+      const projectMatch = /^\/api\/v1\/projects\/([0-9a-f-]{36})(\/plan-validation|\/manual-plan(?:\/([1-9][0-9]{0,2}))?)?$/i.exec(path);
+      if (projectMatch && (!UUID.test(projectMatch[1]) || Number(projectMatch[3]) > 200)) return fail(404, 'not_found');
       const kind = projectMatch?.[2]?.toLowerCase() || '', isProject = !!projectMatch;
-      const isValidation = kind === '/plan-validation', isManualPlan = kind === '/manual-plan';
+      const revision = projectMatch?.[3] ? Number(projectMatch[3]) : null;
+      const isValidation = kind === '/plan-validation', isManualPlan = kind === '/manual-plan' || revision !== null;
       if (!isProject && !['/api/v1/health', '/api/v1/me', '/api/v1/projects'].includes(path)) return fail(404, 'not_found');
-      const allowedMethods = isManualPlan ? ['GET', 'POST'] : isValidation ? ['POST'] : ['GET'];
+      const allowedMethods = isManualPlan ? (revision === null ? ['GET', 'POST'] : ['GET']) : isValidation ? ['POST'] : ['GET'];
       if (!allowedMethods.includes(req.method)) return fail(405, 'method_not_allowed', { Allow: allowedMethods.join(', ') });
       const hasJsonBody = req.method === 'POST';
       if (!hasJsonBody && (req.headers['transfer-encoding'] || (req.headers['content-length'] && req.headers['content-length'] !== '0'))) return fail(400, 'invalid_request');
@@ -154,21 +155,22 @@ export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 50
         if (isManualPlan && req.method === 'GET') {
           const planQuery = new URLSearchParams({ select: 'project_id,user_id,revision,project_version,tasks,created_at',
             project_id: `eq.${projectId}`, user_id: `eq.${ownerId}`, order: 'revision.desc', limit: '1' });
+          if (revision !== null) planQuery.set('revision', `eq.${revision}`);
           const planResponse = await upstream(`/rest/v1/studio_manual_plan_revisions?${planQuery}`, token);
           if (req.aborted || res.destroyed) return;
           if (planResponse.status === 401 || planResponse.status === 403) return fail(403, 'access_denied');
           if (!planResponse.ok) return fail(503, 'manual_plans_unavailable');
           const plans = await readJsonBounded(planResponse);
           if (!Array.isArray(plans) || plans.length > 1) return fail(503, 'manual_plans_unavailable');
-          if (!plans.length) return send(res, 200, { plan: null, current_project_version: project.version }, id);
+          if (!plans.length) return revision === null ? send(res, 200, { plan: null, current_project_version: project.version }, id) : fail(404, 'not_found');
           const plan = plans[0];
           if (!plan || typeof plan.project_id !== 'string' || plan.project_id.toLowerCase() !== projectId ||
               typeof plan.user_id !== 'string' || plan.user_id.toLowerCase() !== ownerId ||
-              !Number.isSafeInteger(plan.revision) || plan.revision < 1 || plan.revision > 200 ||
+              !Number.isSafeInteger(plan.revision) || plan.revision < 1 || plan.revision > 200 || (revision !== null && plan.revision !== revision) ||
               typeof plan.created_at !== 'string' || !Number.isFinite(Date.parse(plan.created_at)) ||
               !validatePlanProposal({ project_version: plan.project_version, tasks: plan.tasks }, { stored: true }).valid) return fail(503, 'manual_plans_unavailable');
-          const { revision, project_version, tasks, created_at } = plan;
-          return send(res, 200, { plan: { revision, project_version, tasks, created_at },
+          const { revision: planRevision, project_version, tasks, created_at } = plan;
+          return send(res, 200, { plan: { revision: planRevision, project_version, tasks, created_at },
             current_project_version: project.version, stale: project_version !== project.version }, id);
         }
         const body = await readRequestJson(req);

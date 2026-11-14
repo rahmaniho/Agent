@@ -224,7 +224,9 @@ function manualPlanUpstream(calls, state) {
     }
     if(parsed.pathname==='/rest/v1/studio_manual_plan_revisions') {
       if(state.badRead) return json([{...state.rows.at(-1),user_id:userB}]);
-      return json(state.rows.filter(row=>row.user_id===who && parsed.searchParams.get('project_id')===`eq.${row.project_id}`).slice(-1));
+      if(state.wrongRevision) return json([state.rows.at(-1)]);
+      const revision=parsed.searchParams.get('revision');
+      return json(state.rows.filter(row=>row.user_id===who && parsed.searchParams.get('project_id')===`eq.${row.project_id}` && (!revision || revision===`eq.${row.revision}`)).slice(-1));
     }
     if(parsed.pathname==='/rest/v1/rpc/studio_save_manual_plan') {
       state.rpcCalls++; const args=JSON.parse(init.body), last=state.rows.at(-1), revision=last?.revision || 0;
@@ -292,6 +294,21 @@ test('manual plan save has no automatic retry; same-key retry resolves an ambigu
   state.projectVersion=4;
   const retry=await postManual(base,projectA,'token-a',body);assert.equal(retry.status,200);assert.equal((await retry.json()).replayed,true);assert.equal(state.rows.length,2);
   const changed=await postManual(base,projectA,'token-a',{...body,tasks:body.tasks.map((task,i)=>i===0 ? {...task,title:'changed'} : task)});assert.equal(changed.status,409);assert.equal((await changed.json()).error.code,'idempotency_key_conflict');
+});
+
+test('a specific manual plan revision is owner-scoped and read-only', async t=>{
+  const state={rows:[],rpcCalls:0},calls=[],base=await withApp(t,manualPlanUpstream(calls,state));
+  const first={...proposal(),expected_revision:0};assert.equal((await postManual(base,projectA,'token-a',first)).status,201);
+  const second={...proposal(),expected_revision:1,tasks:first.tasks.map((task,i)=>i===0 ? {...task,title:'نسخه دوم'} : task)};
+  assert.equal((await postManual(base,projectA,'token-a',second)).status,201);
+  const old=await get(`${base}/api/v1/projects/${projectA}/manual-plan/1`,'token-a');assert.equal(old.status,200);
+  const result=await old.json();assert.equal(result.plan.revision,1);assert.deepEqual(result.plan.tasks,first.tasks);assert.equal('operation_id' in result.plan,false);
+  const query=calls.find(call=>call.url.pathname==='/rest/v1/studio_manual_plan_revisions');assert.equal(query.url.searchParams.get('revision'),'eq.1');
+  assert.equal((await get(`${base}/api/v1/projects/${projectA}/manual-plan/3`,'token-a')).status,404);
+  assert.equal((await get(`${base}/api/v1/projects/${projectA}/manual-plan/1`,'token-b')).status,404);
+  state.wrongRevision=true;assert.equal((await get(`${base}/api/v1/projects/${projectA}/manual-plan/1`,'token-a')).status,503);state.wrongRevision=false;
+  for(const rev of ['0','01','201','-1']) assert.equal((await get(`${base}/api/v1/projects/${projectA}/manual-plan/${rev}`,'token-a')).status,404);
+  const response=await fetch(`${base}/api/v1/projects/${projectA}/manual-plan/1`,{method:'POST'});assert.equal(response.status,405);assert.equal(response.headers.get('allow'),'GET');
 });
 
 test('same-key retry after failure before commit creates exactly one revision', async t=>{

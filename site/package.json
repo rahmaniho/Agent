@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "build:workspace": "esbuild src/workspace.js --bundle --format=esm --minify --legal-comments=eof --outfile=assets/workspace.js",
-    "test": "node --test tools/test-ui.mjs tools/test-project-draft-db.mjs && node tools/test-local-bridge.mjs"
+    "test": "node --test tools/test-ui.mjs tools/test-project-draft-db.mjs && node tools/test-local-bridge.mjs",
+    "test:postgres": "node --test tools/test-manual-plan-postgres.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.98.0"
@@ -11,6 +12,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",
     "esbuild": "0.25.12",
-    "jsdom": "^26.1.0"
+    "jsdom": "^26.1.0",
+    "pg": "8.16.3"
   }
 }

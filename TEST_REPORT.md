@@ -54,3 +54,13 @@
 ## idempotency طرح دستی — آزمون محلی
 
 `npm test --prefix site`: ۶۳ تست موفق شامل ۶ تست PostgreSQL/سازندهٔ درخواست، به‌علاوهٔ bridge؛ `node --test server/*.test.mjs`: ۲۲ تست موفق. build بازتولید و diff-check موفق است. PGlite migration ترتیبی 011→012، حفظ revision قدیمی بدون کلید، حذف امضای قدیمی، replay با بدنه/نسخهٔ یکسان، تعارض payload و نسخه، replay پس از تغییر پروژه، revision و سقف ۲۰۰، scope پروژه، نقش‌ها و cascade را بررسی می‌کند. API mock بازپخش پس از commit مبهم و revision بعدی، نبود retry خودکار، کلید نامعتبر/تکراری و تعارض را بررسی می‌کند. `Promise.all` روی یک اتصال آزمون هم‌زمانی واقعی دو اتصال نیست؛ Supabase/PostgREST، migration زنده و rollout هماهنگ تست نشده‌اند.
+
+## هم‌زمانی طرح روی PostgreSQL واقعی و محلی
+
+`npm run test:postgres --prefix site` در یک cluster اختصاصی و دورریختنی PostgreSQL 16.15 با چند اتصال مستقل موفق بود. تست تراکنش اول را باز نگه می‌دارد و با `pg_stat_activity` انتظار واقعی اتصال دوم برای lock را بررسی می‌کند؛ سپس commit با کلید یکسان و replay، کلید متفاوت و conflict، payload متفاوت با همان کلید، rollback و درج اتصال دوم، و commit تغییر version پروژه پیش از ذخیره را بررسی می‌کند. migrationهای 006/011/012 و نقش‌های آزمایشی در cluster خالی ساخته می‌شوند. تست به URL صریح loopback و DB `agent_studio_test` نیاز دارد و پیش از DDL وجود DB دیگر، نقش‌ها و schemaهای موجود را بررسی و رد می‌کند؛ هرگز علیه Supabase یا cluster شخصی اجرا نشود. CI job جداگانه از container دورریختنی PostgreSQL 16 استفاده می‌کند.
+
+این آزمون جای Supabase Auth/PostgREST، policy و schema cache واقعی، replication، تست بار یا اثبات همهٔ interleavingها نیست؛ snapshot غیراتمیک GET و bypass version پروژه توسط legacy باقی‌اند. هیچ migration زنده‌ای اجرا نشده است.
+
+## خواندن revision مشخص
+
+تست API با upstream ساختگی خواندن revision قدیمی پس از ذخیرهٔ نسخهٔ جدید، منع مالک دیگر، revision نامعتبر/ناموجود، ممنوعیت POST و رد پاسخ upstream با شمارهٔ اشتباه را پوشش می‌دهد. عملیات و کلید idempotency در پاسخ بازگردانده نمی‌شوند. PostgREST واقعی و UI هنوز آزموده یا متصل نشده‌اند.
