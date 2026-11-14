@@ -20,10 +20,17 @@ fullPlaybooks.services.find(s=>s.id==='harness').skills.push('configure-ecc');
 fullPlaybooks.services.find(s=>s.id==='website').skills.push('synthetic-premium-tool');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+function goToProjectReview(w) {
+  const $=s=>w.document.querySelector(s);
+  if(!$('#projectWizardInfo').hidden) $('#projectWizardNext').click();
+  if(!$('#projectWizardPlan').hidden) $('#projectWizardNext').click();
+  assert.equal($('#projectWizardReview').hidden,false);
+}
 async function waitFor(fn) { for (let i = 0; i < 100; i++) { if (fn()) return; await delay(10); } throw new Error('Timed out waiting for UI'); }
 function page() {
   const dom = new JSDOM(html, { url: 'http://127.0.0.1:4173/', runScripts: 'outside-only', pretendToBeVisual: true });
   dom.window.scrollTo = () => {}; dom.window.matchMedia = () => ({ matches:false });
+  dom.window.TextEncoder = TextEncoder;
   return dom;
 }
 
@@ -405,7 +412,7 @@ test('failed sign-in keeps the dialog open and password toggle is accessible', a
 test('recovery uses the backend, generic messaging and a validated password update', async () => {
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), calls=[]; let callback;
   const session={user:{id:'user-1',email:'person@example.test'}};
-  const client={auth:{onAuthStateChange:fn=>{callback=fn;},getSession:async()=>({data:{session:null}}),resetPasswordForEmail:async(email,opts)=>{calls.push({email,opts});return {error:null};},updateUser:async args=>{calls.push(args);return {error:null};}},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  const client={auth:{onAuthStateChange:fn=>{callback=fn;},getSession:async()=>({data:{session:null}}),resetPasswordForEmail:async(email,opts)=>{calls.push({email,opts});return {error:null};},updateUser:async args=>{calls.push(args);return {error:null};}},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
   w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
   try {
     await delay(20); $('#headerLogin').click(); $('#forgotPassword').click(); assert.equal($('#authForgotPanel').hidden,false);
@@ -421,7 +428,7 @@ test('recovery uses the backend, generic messaging and a validated password upda
 
 test('late initial session cannot replace a newer auth event', async () => {
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let callback, finish;
-  const client={auth:{onAuthStateChange:fn=>{callback=fn;},getSession:()=>new Promise(resolve=>{finish=resolve;})},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
+  const client={auth:{onAuthStateChange:fn=>{callback=fn;},getSession:()=>new Promise(resolve=>{finish=resolve;})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:()=>({select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})})};
   w.__client=client; w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
   try {
     callback('SIGNED_IN',{user:{id:'user-1',email:'person@example.test'}}); finish({data:{session:null}}); await delay(30);
@@ -551,11 +558,11 @@ test('projects create and update a cloud checklist with optimistic versioning', 
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), records=[];
   const session={user:{id:'member-1',email:'member@example.test'}};
   const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},
-    rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},
+    rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},
     from:table=>{
       if(table!=='studio_projects') return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
       return {
-        select:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})}),
+        select:()=>({order:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})})}),
         insert:async row=>{records.push({...row,id:'project-1',version:1});return {error:null};},
         update:patch=>{let id,version; const chain={eq:(k,v)=>{if(k==='id') id=v; else version=v;return chain;},select:()=>({maybeSingle:async()=>{const r=records.find(r=>r.id===id && r.version===version);if(!r)return {data:null,error:null};Object.assign(r,patch);return {data:{version:r.version},error:null};}})};return chain;},
         delete:()=>({eq:async()=>({error:null})})
@@ -567,7 +574,7 @@ test('projects create and update a cloud checklist with optimistic versioning', 
     w.location.hash='#/projects'; await waitFor(()=>!$('#projectCreate').disabled && $('#projectType').options.length);
     $('#projectTitle').value='آزمون'; $('#projectDescription').value='نیاز من';
     $('input[value=accounts]').click(); assert.match($('#projectSuggestion').textContent,/امنیت حساب‌ها/);
-    $('#projectForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
+    goToProjectReview(w); $('#projectForm').dispatchEvent(new w.Event('submit',{cancelable:true,bubbles:true}));
     await waitFor(()=>$('#projectList input[type=checkbox]'));
     assert.equal(records[0].description,'نیاز من'); assert.ok(records[0].checklist.some(step=>step.text.includes('امنیت حساب‌ها')));
     $('#projectList input').click(); await waitFor(()=>records[0].version===2);
@@ -900,9 +907,9 @@ test('project workspace filters, sorts, edits stages and deletes with version ch
     {id:'c',title:'گاما',description:'<img src=x onerror=alert(1)>',project_type:'website',version:1,updated_at:'2026-03-01T10:00:00Z',checklist:[{text:'پایان',done:true}]},
   ]; let deleteVersion;
   const session={user:{id:'member-1',email:'member@example.test'}};
-  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
     if(table!=='studio_projects') return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
-    return {select:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})}),
+    return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})})}),
       update:patch=>{let id,version; const chain={eq:(key,value)=>{if(key==='id') id=value; if(key==='version') version=value;return chain;},select:()=>({maybeSingle:async()=>{const row=records.find(r=>r.id===id && r.version===version); if(!row)return {data:null,error:null}; Object.assign(row,structuredClone(patch)); return {data:{version:row.version},error:null};}})};return chain;},
       delete:()=>{let id,version; const chain={eq:(key,value)=>{if(key==='id') id=value; if(key==='version') version=value;return chain;},select:()=>({maybeSingle:async()=>{deleteVersion=version; const idx=records.findIndex(r=>r.id===id && r.version===version); if(idx<0)return {data:null,error:null};records.splice(idx,1);return {data:{id},error:null};}})};return chain;}};
   }};
@@ -931,9 +938,9 @@ test('project conflict keeps drafts, confirms refresh, and never leaks a late sa
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), records=[{id:'a',title:'پروژه',description:'اول',project_type:'website',version:1,checklist:[{text:'کار',done:false}]}];
   let auth, allow=false, pending=null, writes=0;
   const session={user:{id:'member-1',email:'one@example.test'}};
-  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
     if(table!=='studio_projects') return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
-    return {select:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})}),update:patch=>{let version; const chain={eq:(key,value)=>{if(key==='version')version=value;return chain;},select:()=>({maybeSingle:async()=>{writes++;if(pending)return new Promise(resolve=>{pending=()=>resolve({data:{version:version+1},error:null});});const row=records.find(r=>r.version===version);if(!row)return {data:null,error:null};Object.assign(row,patch);return {data:{version:row.version},error:null};}})};return chain;}};
+    return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:structuredClone(records),error:null})})})}),update:patch=>{let version; const chain={eq:(key,value)=>{if(key==='version')version=value;return chain;},select:()=>({maybeSingle:async()=>{writes++;if(pending)return new Promise(resolve=>{pending=()=>resolve({data:{version:version+1},error:null});});const row=records.find(r=>r.version===version);if(!row)return {data:null,error:null};Object.assign(row,patch);return {data:{version:row.version},error:null};}})};return chain;}};
   }};
   w.confirm=()=>allow; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
   w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
@@ -954,9 +961,9 @@ test('project conflict keeps drafts, confirms refresh, and never leaks a late sa
 test('project loading locks edits and a failed refresh leaves old data read-only for retry', async () => {
   const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), records=[{id:'a',title:'پروژه',description:'اطلاعات پیشین',project_type:'website',version:1,checklist:[{text:'کار',done:false}]}];
   let resolveLoad, loads=0, writes=0;
-  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:{user:{id:'member-1',email:'one@example.test'}}}})},rpc:async name=>name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session:{user:{id:'member-1',email:'one@example.test'}}}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
     if(table!=='studio_projects') return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
-    return {select:()=>({order:()=>({limit:async()=>{loads++; if(loads===2) return new Promise(resolve=>{resolveLoad=resolve}); return {data:structuredClone(records),error:null};}})}), update:()=>{writes++;throw new Error('must not write');}};
+    return {select:()=>({order:()=>({order:()=>({limit:async()=>{loads++; if(loads===2) return new Promise(resolve=>{resolveLoad=resolve}); return {data:structuredClone(records),error:null};}})})}), update:()=>{writes++;throw new Error('must not write');}};
   }};
   w.confirm=()=>true; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
   w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
@@ -970,4 +977,395 @@ test('project loading locks edits and a failed refresh leaves old data read-only
     $('#projectRefresh').click(); await waitFor(()=>loads===3 && !$('#projectList input[type=checkbox]').disabled);
     assert.equal($('#projectList .project-edit-title').value,'پروژه'); await delay(30);
   } finally {dom.window.close();}
+});
+
+test('explicit local project drafts restore only for the same account and protect existing form data', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let auth, confirm=true;
+  const session={user:{id:'member-one',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table==='studio_projects') return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:[],error:null})})})})};
+    return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+  }};
+  w.confirm=()=>confirm; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectType').options.length>1 && !$('#projectDraftSave').disabled);
+    $('#projectTitle').value='ایده خصوصی'; $('#projectDescription').value='توضیح'; $('#projectType').value='webapp';
+    $('input[name=projectNeed][value=design]').checked=true; $('#projectType').dispatchEvent(new w.Event('change'));
+    $('#projectDraftSave').click(); assert.match($('#projectDraftStatus').textContent,/فقط در این مرورگر/);
+    const saved=JSON.parse(w.localStorage.getItem('studio-project-draft-v1:member-one'));
+    assert.equal(saved.title,'ایده خصوصی'); assert.equal(saved.type,'webapp'); assert.deepEqual(saved.needs,['design']);
+    $('#projectTitle').value='ویرایش جدید'; confirm=false; $('#projectDraftRestore').click(); assert.equal($('#projectTitle').value,'ویرایش جدید');
+    $('#projectDraftSave').click(); assert.equal(JSON.parse(w.localStorage.getItem('studio-project-draft-v1:member-one')).title,'ایده خصوصی');
+    confirm=true; $('#projectDraftRestore').click(); assert.equal($('#projectTitle').value,'ایده خصوصی');
+    assert.equal($('#projectType').value,'webapp'); assert.equal($('input[name=projectNeed][value=design]').checked,true); assert.match($('#projectSuggestion').textContent,/طرح رابط/);
+    auth('SIGNED_OUT',null); assert.equal($('#projectTitle').value,''); assert.equal($('input[name=projectNeed][value=design]').checked,false); assert.equal($('#projectDraftRestore').disabled,true);
+    auth('SIGNED_IN',{user:{id:'member-two',email:'two@example.test'}}); await waitFor(()=>!$('#projectDraftRestore').disabled);
+    $('#projectDraftRestore').click(); assert.equal($('#projectTitle').value,''); assert.match($('#projectDraftStatus').textContent,/پیدا نشد/);
+    auth('SIGNED_IN',session); await waitFor(()=>!$('#projectDraftRestore').disabled); $('#projectDraftRestore').click(); assert.equal($('#projectTitle').value,'ایده خصوصی');
+    $('#projectDraftDelete').click(); assert.equal(w.localStorage.getItem('studio-project-draft-v1:member-one'),null); assert.equal($('#projectTitle').value,'ایده خصوصی');
+  } finally {dom.window.close();}
+});
+
+test('local draft validation and blocked storage never replace or lose the current form', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), session={user:{id:'member-one',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>table==='studio_projects'?{select:()=>({order:()=>({order:()=>({limit:async()=>({data:[],error:null})})})})}:{select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})}};
+  w.confirm=()=>true; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectType').options.length && !$('#projectDraftSave').disabled);
+    const key='studio-project-draft-v1:member-one'; $('#projectTitle').value='اطلاعات جاری';
+    w.localStorage.setItem(key,JSON.stringify({version:1,title:'نباید نمایش یابد',description:'',type:'website',needs:['unknown']}));
+    $('#projectDraftRestore').click(); assert.equal($('#projectTitle').value,'اطلاعات جاری'); assert.match($('#projectDraftStatus').textContent,/معتبر نیست/);
+    w.localStorage.setItem(key,JSON.stringify({version:1,title:'نباید نمایش یابد',description:'',type:'missing',needs:[]}));
+    $('#projectDraftRestore').click(); assert.equal($('#projectTitle').value,'اطلاعات جاری'); assert.match($('#projectDraftStatus').textContent,/در دسترس نیست/);
+    w.localStorage.setItem(key,'{invalid'); $('#projectDraftRestore').click(); assert.equal($('#projectTitle').value,'اطلاعات جاری'); assert.match($('#projectDraftStatus').textContent,/ممکن نشد/);
+    w.localStorage.setItem(key,JSON.stringify({version:1,title:'پیش‌نویس قدیمی',description:'',type:'website',needs:[]}));
+    $('#projectDraftRestore').click(); assert.equal($('#projectTitle').value,'پیش‌نویس قدیمی'); assert.equal($('#projectPlanCustom').hidden,true);
+    $('#projectTitle').value='اطلاعات جاری';
+    w.localStorage.removeItem(key); const original=w.Storage.prototype.setItem; w.Storage.prototype.setItem=function(){throw new Error('quota');};
+    try { $('#projectDraftSave').click(); assert.equal($('#projectTitle').value,'اطلاعات جاری'); assert.match($('#projectDraftStatus').textContent,/ممکن نشد/); } finally { w.Storage.prototype.setItem=original; }
+  } finally {dom.window.close();}
+});
+
+test('project creation preserves new edits made while save is pending', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), session={user:{id:'member-one',email:'one@example.test'}}; let resolveInsert, submitted;
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table==='studio_projects') return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:[],error:null})})})}),insert:value=>{submitted=value;return new Promise(resolve=>{resolveInsert=resolve;});}};
+    return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+  }};
+  w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectType').options.length && !$('#projectCreate').disabled);
+    $('#projectTitle').value='نسخه اول'; $('#projectDescription').value='قبل'; goToProjectReview(w); $('#projectForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await waitFor(()=>typeof resolveInsert==='function'); assert.equal(submitted.title,'نسخه اول'); assert.equal($('#projectDraftSave').disabled,true);
+    $('#projectWizardBack').click(); $('#projectWizardBack').click(); $('#projectTitle').value='نسخه دوم'; resolveInsert({error:null}); await waitFor(()=>$('#projectCreateStatus').textContent.includes('تغییرات جدید'));
+    assert.equal($('#projectTitle').value,'نسخه دوم'); assert.equal($('#projectDescription').value,'قبل');
+  } finally {dom.window.close();}
+});
+
+test('project plan editor saves edited steps, preserves changes on topic switch and creates the real checklist', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let submitted, auth, confirmed=true;
+  const session={user:{id:'member-one',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table==='studio_projects') return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:[],error:null})})})}),insert:async value=>{submitted=structuredClone(value);return {error:null};}};
+    return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+  }};
+  w.confirm=()=>confirmed; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectSuggestion li') && !$('#projectCreate').disabled);
+    $('#projectTitle').value='طرح واقعی'; $('#projectPlanEdit').click(); assert.equal($('#projectPlanCustom').hidden,false);
+    let inputs=$$('#projectPlanList input');
+    function $$(selector) { return Array.from(w.document.querySelectorAll(selector)); }
+    assert.ok(inputs.length>1); inputs[0].value='مرحله ویرایش‌شده';
+    $('#projectPlanList button').click(); inputs=$$('#projectPlanList input'); assert.notEqual(inputs[0].value,'مرحله ویرایش‌شده');
+    inputs[0].value='<img src=x onerror=alert(1)>'; $('#projectPlanAdd').click(); inputs=$$('#projectPlanList input'); inputs[inputs.length-1].value='کار تازه';
+    const before=inputs.map(i=>i.value);
+    $('#projectType').value='webapp'; $('#projectType').dispatchEvent(new w.Event('change'));
+    assert.deepEqual($$('#projectPlanList input').map(i=>i.value),before);
+    $('#projectDraftSave').click(); assert.deepEqual(JSON.parse(w.localStorage.getItem('studio-project-draft-v1:member-one')).plan,before);
+    confirmed=false; $('#projectPlanReset').click(); assert.equal($('#projectPlanCustom').hidden,false); confirmed=true;
+    $('#projectPlanReset').click(); assert.equal($('#projectPlanCustom').hidden,true);
+    $('#projectDraftRestore').click(); assert.deepEqual($$('#projectPlanList input').map(i=>i.value),before);
+    assert.equal($('#projectPlanList img'),null);
+    auth('SIGNED_OUT',null); assert.equal($('#projectPlanCustom').hidden,true); assert.equal($('#projectPlanList').children.length,0);
+    auth('SIGNED_IN',{user:{id:'member-two',email:'two@example.test'}}); await waitFor(()=>!$('#projectDraftRestore').disabled);
+    $('#projectDraftRestore').click(); assert.equal($('#projectPlanList').children.length,0);
+    auth('SIGNED_IN',session); await waitFor(()=>!$('#projectDraftRestore').disabled);
+    $('#projectDraftRestore').click(); assert.deepEqual($$('#projectPlanList input').map(i=>i.value),before);
+    goToProjectReview(w); $('#projectForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await waitFor(()=>submitted && $('#projectCreateStatus').textContent.includes('پروژه ذخیره شد'));
+    assert.deepEqual(submitted.checklist,before.map(text=>({text,done:false})));
+    assert.equal($('#projectPlanCustom').hidden,true);
+    await delay(50);
+  } finally {dom.window.close();}
+});
+
+test('plan editor rejects blank steps and oversized checklists and never loses pending edits', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let resolveInsert, writes=0;
+  const session={user:{id:'member-one',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table==='studio_projects') return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:[],error:null})})})}),insert:()=>{writes++;return new Promise(resolve=>{resolveInsert=resolve;});}};
+    return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+  }};
+  w.confirm=()=>true; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectSuggestion li') && !$('#projectCreate').disabled);
+    $('#projectTitle').value='پروژه'; $('#projectWizardNext').click(); $('#projectPlanEdit').click(); $('#projectPlanAdd').click();
+    const form=$('#projectForm'); form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    assert.equal(writes,0); assert.match($('#projectPlanStatus').textContent,/هر مرحله/);
+    let inputs=[...w.document.querySelectorAll('#projectPlanList input')]; inputs[inputs.length-1].value='معتبر';
+    // Valid per-field characters can still exceed the database JSON byte budget.
+    while(inputs.length<50) { $('#projectPlanAdd').click(); inputs=[...w.document.querySelectorAll('#projectPlanList input')]; }
+    for(const input of inputs) input.value='م'.repeat(200);
+    assert.equal($('#projectPlanAdd').disabled,true);
+    form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); assert.equal(writes,0); assert.match($('#projectPlanStatus').textContent,/حجم مراحل/);
+    for(const input of inputs) input.value='کار';
+    form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); assert.equal($('#projectWizardReview').hidden,false);
+    form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); await waitFor(()=>typeof resolveInsert==='function');
+    $('#projectWizardBack').click(); $('#projectPlanList input').value='تغییر بعد از ارسال'; resolveInsert({error:null});
+    await waitFor(()=>$('#projectCreateStatus').textContent.includes('تغییرات جدید'));
+    assert.equal($('#projectPlanList input').value,'تغییر بعد از ارسال'); assert.equal($('#projectPlanCustom').hidden,false);
+  } finally {dom.window.close();}
+});
+
+test('three-step project wizard validates, resumes the saved step and reviews actual input before creating', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s); let auth, submitted;
+  const session={user:{id:'member-one',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table==='studio_projects') return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:[],error:null})})})}),insert:async value=>{submitted=structuredClone(value);return {error:null};}};
+    return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+  }};
+  w.confirm=()=>true; w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectSuggestion li') && !$('#projectDraftSave').disabled);
+    const submit=()=>$('#projectForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    assert.equal($('#projectWizardInfo').hidden,false); assert.equal($('#projectWizardPlan').hidden,true); assert.equal($('#projectCreate').hidden,true);
+    $('#projectWizardNext').click(); assert.equal($('#projectWizardInfo').hidden,false); assert.match($('#projectCreateStatus').textContent,/نام و موضوع/); assert.equal(submitted,undefined);
+    $('#projectTitle').value='<img src=x>'; $('#projectDescription').value='هدف واقعی'; submit();
+    assert.equal($('#projectWizardPlan').hidden,false); assert.equal(w.document.activeElement,$('#projectWizardPlanTitle')); assert.equal(submitted,undefined);
+    $('input[name=projectNeed][value=data]').click(); $('#projectPlanEdit').click(); $('#projectPlanList input').value='کار دستی';
+    $('#projectDraftSave').click(); assert.equal(JSON.parse(w.localStorage.getItem('studio-project-draft-v1:member-one')).step,2);
+    auth('SIGNED_OUT',null); assert.equal($('#projectWizardInfo').hidden,false);
+    auth('SIGNED_IN',session); await waitFor(()=>!$('#projectDraftRestore').disabled); $('#projectDraftRestore').click();
+    assert.equal($('#projectWizardPlan').hidden,false); assert.equal($('#projectPlanList input').value,'کار دستی');
+    submit(); assert.equal($('#projectWizardReview').hidden,false); assert.equal(submitted,undefined);
+    assert.equal($('#projectReviewTitle').textContent,'<img src=x>'); assert.equal($('#projectReviewTitle img'),null);
+    assert.equal($('#projectReviewDescription').textContent,'هدف واقعی'); assert.match($('#projectReviewNeeds').textContent,/اطلاعات/); assert.equal($('#projectReviewSteps li').textContent,'کار دستی');
+    $('#projectWizardBack').click(); assert.equal($('#projectWizardPlan').hidden,false); $('#projectPlanList input').value='بازبینی شد';
+    $('#projectWizardNext').click(); assert.equal($('#projectReviewSteps li').textContent,'بازبینی شد');
+    $('#projectDraftSave').click(); assert.equal(JSON.parse(w.localStorage.getItem('studio-project-draft-v1:member-one')).step,3);
+    submit(); await waitFor(()=>submitted && $('#projectCreateStatus').textContent.includes('پروژه ذخیره شد'));
+    assert.equal(submitted.title,'<img src=x>'); assert.equal(submitted.checklist[0].text,'بازبینی شد'); assert.equal($('#projectWizardInfo').hidden,false);
+    await delay(50);
+  } finally {dom.window.close();}
+});
+
+test('project creation requires a fresh review if the template changes after review', async () => {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), session={user:{id:'member-one',email:'one@example.test'}}; let submitted;
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>table==='studio_projects'?{select:()=>({order:()=>({order:()=>({limit:async()=>({data:[],error:null})})})}),insert:async value=>{submitted=structuredClone(value);return {error:null};}}:{select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})}};
+  w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectSuggestion li') && !$('#projectCreate').disabled);
+    $('#projectTitle').value='پروژه'; goToProjectReview(w);
+    // A catalog/session refresh may regenerate the template while review is open.
+    const li=w.document.createElement('li'); li.textContent='مرحلهٔ تازه'; $('#projectSuggestion ol').append(li);
+    $('#projectForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    assert.equal(submitted,undefined); assert.match($('#projectCreateStatus').textContent,/بازبینی تازه/);
+    assert.ok([...w.document.querySelectorAll('#projectReviewSteps li')].some(el=>el.textContent==='مرحلهٔ تازه'));
+    $('#projectForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+    await waitFor(()=>submitted && $('#projectCreateStatus').textContent.includes('پروژه ذخیره شد'));
+    assert.ok(submitted.checklist.some(step=>step.text==='مرحلهٔ تازه')); await delay(50);
+  } finally {dom.window.close();}
+});
+
+function cloudDraftBackend() {
+  const records=new Map(); let pendingRead=null, ambiguous=false, saveCalls=0;
+  return {records,get saveCalls(){return saveCalls;},delayNextRead(){pendingRead=true;}, get pendingRead(){return pendingRead;},
+    failNextSaveAfterCommit(){ambiguous=true;},
+    client(sessionHolder) {
+      return {auth:{onAuthStateChange:fn=>{sessionHolder.auth=fn;},getSession:async()=>({data:{session:sessionHolder.session}})},
+        rpc:async (name,args)=>{
+          if(name==='studio_my_account') return {data:[{is_admin:false,plan:'free'}]};
+          const who=sessionHolder.session?.user.id, current=records.get(who);
+          if(name==='studio_save_project_draft') {
+            saveCalls++;
+            if((current?.revision || 0)!==args.expected_revision) return {data:[{applied:false,revision:null}]};
+            const revision=args.expected_revision+1; records.set(who,{revision,payload:structuredClone(args.draft)});
+            if(ambiguous) {ambiguous=false;return {error:{message:'network lost'}};}
+            return {data:[{applied:true,revision}]};
+          }
+          if(name==='studio_delete_project_draft') {
+            if(!current?.payload || current.revision!==args.expected_revision) return {data:[{applied:false,revision:null}]};
+            const revision=current.revision+1; records.set(who,{revision,payload:null}); return {data:[{applied:true,revision}]};
+          }
+          return {data:[]};
+        },
+        from:table=>{
+          if(table==='studio_project_drafts') return {select:()=>({eq:(_key,who)=>({maybeSingle:async()=>{
+            const result=()=>({data:who===sessionHolder.session?.user.id ? structuredClone(records.get(who) || null) : null,error:null});
+            if(pendingRead===true) return new Promise(resolve=>{pendingRead=()=>resolve(result());});
+            return result();
+          }})})};
+          if(table==='studio_projects') return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:[],error:null})})})})};
+          return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+        }};
+    }};
+}
+async function cloudPage(backend, id='member-one') {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s), holder={session:{user:{id,email:'member@example.test'}}};
+  w.__client=backend.client(holder); w.confirm=()=>true; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  w.location.hash='#/projects'; await waitFor(()=>$('#projectType').options.length && !$('#projectCloudCheck').disabled);
+  return {dom,w,$,holder};
+}
+
+test('cloud draft CAS across two devices preserves edits and tombstone revisions', async () => {
+  const backend=cloudDraftBackend(), a=await cloudPage(backend), b=await cloudPage(backend);
+  try {
+    a.$('#projectTitle').value='دستگاه اول'; a.$('#projectCloudSave').click(); assert.match(a.$('#projectCloudStatus').textContent,/ابتدا/); assert.equal(backend.saveCalls,0);
+    a.$('#projectCloudCheck').click(); await waitFor(()=>a.$('#projectCloudStatus').textContent.includes('وجود ندارد'));
+    a.$('#projectCloudSave').click(); await waitFor(()=>a.$('#projectCloudStatus').textContent.includes('در حساب ذخیره شد'));
+    b.$('#projectCloudRestore').click(); await waitFor(()=>b.$('#projectCloudStatus').textContent.includes('از حساب بازیابی شد'));
+    assert.equal(b.$('#projectTitle').value,'دستگاه اول');
+    a.$('#projectTitle').value='تغییر اول'; a.$('#projectCloudSave').click(); await waitFor(()=>backend.records.get('member-one').revision===2 && !a.$('#projectCloudSave').disabled);
+    b.$('#projectTitle').value='تغییر دوم'; b.$('#projectCloudSave').click(); await waitFor(()=>b.$('#projectCloudStatus').textContent.includes('دستگاه دیگری'));
+    assert.equal(b.$('#projectTitle').value,'تغییر دوم'); assert.equal(backend.records.get('member-one').payload.title,'تغییر اول');
+    b.$('#projectCloudCheck').click(); await waitFor(()=>b.$('#projectCloudStatus').textContent.includes('وجود دارد'));
+    b.$('#projectCloudSave').click(); await waitFor(()=>backend.records.get('member-one').revision===3 && !b.$('#projectCloudSave').disabled);
+    a.$('#projectCloudDelete').click(); await waitFor(()=>a.$('#projectCloudStatus').textContent.includes('تغییر کرده'));
+    a.$('#projectCloudCheck').click(); await waitFor(()=>a.$('#projectCloudStatus').textContent.includes('وجود دارد'));
+    a.$('#projectCloudDelete').click(); await waitFor(()=>backend.records.get('member-one').revision===4 && !a.$('#projectCloudDelete').disabled);
+    assert.equal(backend.records.get('member-one').payload,null); assert.equal(a.$('#projectTitle').value,'تغییر اول');
+    b.$('#projectCloudSave').click(); await waitFor(()=>b.$('#projectCloudStatus').textContent.includes('دستگاه دیگری'));
+    b.$('#projectCloudCheck').click(); await waitFor(()=>b.$('#projectCloudStatus').textContent.includes('وجود ندارد'));
+    b.$('#projectCloudSave').click(); await waitFor(()=>backend.records.get('member-one').revision===5 && !b.$('#projectCloudSave').disabled);
+    assert.equal(backend.records.get('member-one').payload.title,'تغییر دوم'); await delay(50);
+  } finally {a.dom.window.close();b.dom.window.close();}
+});
+
+test('ambiguous cloud save requires recheck, and a late read cannot leak to a different account', async () => {
+  const backend=cloudDraftBackend(), a=await cloudPage(backend);
+  try {
+    a.$('#projectTitle').value='فرم محفوظ'; a.$('#projectCloudCheck').click(); await waitFor(()=>a.$('#projectCloudStatus').textContent.includes('وجود ندارد'));
+    backend.failNextSaveAfterCommit(); a.$('#projectCloudSave').click(); await waitFor(()=>a.$('#projectCloudStatus').textContent.includes('نتیجهٔ ذخیره مشخص نیست'));
+    assert.equal(a.$('#projectTitle').value,'فرم محفوظ'); assert.equal(backend.records.get('member-one').revision,1);
+    a.$('#projectCloudSave').click(); assert.match(a.$('#projectCloudStatus').textContent,/ابتدا/); assert.equal(backend.saveCalls,1);
+    backend.delayNextRead(); a.$('#projectCloudRestore').click(); await waitFor(()=>typeof backend.pendingRead==='function');
+    const resolve=backend.pendingRead; a.holder.session={user:{id:'member-two',email:'two@example.test'}}; a.holder.auth('SIGNED_IN',a.holder.session);
+    assert.equal(a.$('#projectTitle').value,''); resolve(); await delay(50);
+    assert.equal(a.$('#projectTitle').value,''); assert.equal(a.$('#projectCloudStatus').textContent,'');
+    await waitFor(()=>!a.$('#projectCloudCheck').disabled); a.$('#projectCloudCheck').click(); await waitFor(()=>a.$('#projectCloudStatus').textContent.includes('وجود ندارد'));
+  } finally {a.dom.window.close();}
+});
+
+function projectPagingRows(count) {
+  return Array.from({length:count},(_,index)=>({id:`00000000-0000-4000-8000-${(count-index).toString(16).padStart(12,'0')}`,title:`پروژه ${index+1}`,description:index===204?'جستجوی دوردست':'',project_type:'website',checklist:[],version:1,updated_at:'2026-11-13T18:19:20.123456+00:00'}));
+}
+function pagingBuilder(result,calls) {
+  const filters=[],orders=[];
+  const query={order:(key,opts)=>{orders.push({key,...opts});return query;},or:value=>{filters.push(value);return query;},limit:async n=>{calls.push({orders,filters,limit:n});return result(filters);}};
+  return query;
+}
+
+test('keyset pagination handles equal timestamps, preserves edits and labels filters as loaded-only', async () => {
+  const dom=page(),w=dom.window,$=s=>w.document.querySelector(s), rows=projectPagingRows(205),calls=[];
+  const session={user:{id:'member-one',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:()=>{},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table==='studio_projects') return {select:()=>pagingBuilder(filters=>{
+      const match=filters[0]?.match(/id\.lt\.([0-9a-f-]+)/i); const start=match ? rows.findIndex(row=>row.id===match[1])+1 : 0;
+      return {data:structuredClone(rows.slice(start,start+100)),error:null};
+    },calls)};
+    return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+  }};
+  w.__client=client; w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data}); w.confirm=()=>true;
+  w.eval(app); w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects'; await waitFor(()=>$('#projectList').children.length===100 && !$('#projectMore').disabled);
+    assert.equal($('#projectMore').hidden,false); assert.equal($('#projectStatTotal').textContent,'۱۰۰');
+    assert.deepEqual(calls[0].orders,[{key:'updated_at',ascending:false},{key:'id',ascending:false}]); assert.equal(calls[0].limit,100);
+    assert.match(w.document.querySelector('.project-stats>p').textContent,/فقط بر اساس پروژه‌های بارگذاری‌شده/);
+    $('#projectSearch').value='جستجوی دوردست'; $('#projectSearch').dispatchEvent(new w.Event('input')); assert.equal($('#projectEmpty').hidden,false);
+    const first=$('#projectList .project-edit-title'); first.value='ویرایش ذخیره‌نشده';
+    $('#projectMore').click(); await waitFor(()=>$('#projectList').children.length===200 && !$('#projectMore').disabled);
+    assert.equal(first.value,'ویرایش ذخیره‌نشده'); assert.equal($('#projectStatTotal').textContent,'۲۰۰');
+    assert.equal(calls.find(call=>call.filters.length).filters[0],`updated_at.lt."2026-11-13T18:19:20.123456+00:00",and(updated_at.eq."2026-11-13T18:19:20.123456+00:00",id.lt.${rows[99].id})`);
+    $('#projectMore').click(); await waitFor(()=>$('#projectList').children.length===205 && $('#projectMore').hidden);
+    assert.equal(first.value,'ویرایش ذخیره‌نشده'); assert.equal($('#projectStatTotal').textContent,'۲۰۵'); assert.equal($('#projectEmpty').hidden,true);
+    assert.match($('#projectResults').textContent,/۱ از ۲۰۵/); await delay(50);
+  } finally {dom.window.close();}
+});
+
+test('loading another project page retries failures and discards responses after account changes', async () => {
+  const dom=page(),w=dom.window,$=s=>w.document.querySelector(s), rows=projectPagingRows(101), calls=[]; let auth,more=0,resolvePage;
+  const session={user:{id:'member-one',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{auth=fn;},getSession:async()=>({data:{session}})},rpc:async name=>name==='studio_update_project_cas'?{error:{code:'PGRST202'}}:name==='studio_my_account'?{data:[{is_admin:false,plan:'free'}]}:{data:[]},from:table=>{
+    if(table==='studio_projects') return {select:()=>pagingBuilder(async filters=>{
+      if(!filters.length) return {data:structuredClone(rows.slice(0,100)),error:null};
+      if(++more===1) return {error:{message:'offline'}};
+      return new Promise(resolve=>{resolvePage=()=>resolve({data:structuredClone(rows.slice(100)),error:null});});
+    },calls)};
+    return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+  }};
+  w.__client=client;w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});w.confirm=()=>true;
+  w.eval(app);w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  try {
+    w.location.hash='#/projects';await waitFor(()=>$('#projectList').children.length===100 && !$('#projectMore').disabled);
+    const input=$('#projectList .project-edit-title');input.value='پیش‌نویس حفظ شود';$('#projectMore').click();
+    await waitFor(()=>$('#projectStatus').textContent.includes('پروژه‌های فعلی حفظ شدند'));assert.equal(input.value,'پیش‌نویس حفظ شود');assert.equal($('#projectList').children.length,100);
+    $('#projectMore').click();await waitFor(()=>typeof resolvePage==='function');assert.equal($('#projectMore').disabled,true);
+    auth('SIGNED_OUT',null);assert.equal($('#projectList').children.length,0);assert.equal($('#projectMore').hidden,true);
+    resolvePage();await delay(70);assert.equal($('#projectList').children.length,0);assert.equal($('#projectMore').hidden,true);
+  } finally {dom.window.close();}
+});
+
+async function casProjectPage() {
+  const dom=page(), w=dom.window, $=s=>w.document.querySelector(s);
+  const record={id:'p1',title:'پروژه',description:'توضیح',project_type:'website',version:1,updated_at:'2026-11-01T12:00:00Z',checklist:[{text:'مرحله',done:false}]};
+  const state={mode:'success',rpcCalls:[],legacyCalls:0,auth:null,resolveRpc:null};
+  const session={user:{id:'member-one',email:'one@example.test'}};
+  const client={auth:{onAuthStateChange:fn=>{state.auth=fn;},getSession:async()=>({data:{session}})},rpc:async (name,args)=>{
+    if(name==='studio_my_account') return {data:[{is_admin:false,plan:'free'}]};
+    if(name!=='studio_update_project_cas') return {data:[]};
+    state.rpcCalls.push(structuredClone(args));
+    if(state.mode==='pending') return new Promise(resolve=>{state.resolveRpc=resolve;});
+    if(state.mode==='missing') return {error:{code:'PGRST202'}};
+    if(state.mode==='denied') return {error:{code:'42501'}};
+    if(state.mode==='malformed') return {data:[{applied:true,new_version:99,updated_at:'invalid'}]};
+    if(state.mode==='conflict' || args.expected_version!==record.version) return {data:[{applied:false,new_version:null,updated_at:null}]};
+    Object.assign(record,structuredClone(args.patch),{version:record.version+1,updated_at:'2026-11-14T13:14:15.123456+00:00'});
+    return {data:[{applied:true,new_version:record.version,updated_at:record.updated_at}]};
+  },from:table=>{
+    if(table==='studio_projects') return {select:()=>({order:()=>({order:()=>({limit:async()=>({data:[structuredClone(record)],error:null})})})}),update:patch=>{
+      state.legacyCalls++;let expected;const q={eq:(key,value)=>{if(key==='version')expected=value;return q;},select:()=>({maybeSingle:async()=>{
+        if(expected!==record.version) return {data:null,error:null}; Object.assign(record,structuredClone(patch));return {data:{version:record.version},error:null};}})};return q;
+    }};
+    return {select:()=>({order:()=>({order:()=>({range:async()=>({data:[],error:null})})})})};
+  }};
+  w.__client=client;w.confirm=()=>true;w.fetch=async url=>({ok:true,json:async()=>url.endsWith('playbooks.json')?playbooks:data});
+  w.eval(app);w.eval(workspaceSource.replace("import { createClient } from '@supabase/supabase-js';", '').replace(/const supabase = createClient\([^;]+;/, 'const supabase = window.__client;'));
+  w.location.hash='#/projects';await waitFor(()=>$('#projectList .project-card') && !$('#projectRefresh').disabled);
+  return {dom,w,$,state,record};
+}
+
+test('project CAS uses server revision and timestamp and retains form on conflict', async()=>{
+  const a=await casProjectPage(),{$,state,record}=a;
+  try {
+    $('#projectList input[type=checkbox]').click(); await waitFor(()=>record.version===2 && $('#projectStatus').textContent==='پیشرفت ذخیره شد.');
+    assert.equal(state.legacyCalls,0); assert.equal(state.rpcCalls[0].expected_version,1); assert.equal(state.rpcCalls[0].target_id,'p1');
+    assert.equal(state.rpcCalls[0].patch.checklist[0].done,true); assert.ok(!('updated_at' in state.rpcCalls[0].patch));
+    assert.match($('#projectConcurrencyInfo').textContent,/کنترل نسخهٔ سروری/);
+    $('#projectList .project-edit-title').value='پیش‌نویس نگه‌داشته‌شده';state.mode='conflict';$('#projectList input[type=checkbox]').click();
+    await waitFor(()=>$('#projectList .project-conflict'));assert.equal(state.rpcCalls[1].expected_version,2);
+    assert.equal($('#projectList .project-edit-title').value,'پیش‌نویس نگه‌داشته‌شده');assert.equal(state.legacyCalls,0);
+    assert.equal($('#projectList input[type=checkbox]').disabled,true);await delay(50);
+  } finally {a.dom.window.close();}
+});
+
+test('only an absent CAS RPC uses legacy writes; denied and ambiguous outcomes fail closed', async()=>{
+  const a=await casProjectPage(),{$,state,record}=a;
+  try {
+    state.mode='missing';$('#projectList input[type=checkbox]').click();await waitFor(()=>record.version===2 && $('#projectStatus').textContent==='پیشرفت ذخیره شد.');
+    assert.equal(state.legacyCalls,1);assert.match($('#projectConcurrencyInfo').textContent,/نسخهٔ قبلی/);
+    state.mode='denied';$('#projectList input[type=checkbox]').click();await waitFor(()=>$('#projectStatus').textContent.includes('نتیجهٔ ذخیره مشخص نیست'));
+    assert.equal(state.legacyCalls,1);assert.equal($('#projectList input[type=checkbox]').disabled,true);
+    $('#projectRefresh').click();await waitFor(()=>!$('#projectList input[type=checkbox]').disabled);
+    state.mode='malformed';$('#projectList input[type=checkbox]').click();await waitFor(()=>$('#projectStatus').textContent.includes('نتیجهٔ ذخیره مشخص نیست'));
+    assert.equal(state.legacyCalls,1);assert.equal($('#projectList input[type=checkbox]').disabled,true);await delay(50);
+  } finally {a.dom.window.close();}
+});
+
+test('a late missing-RPC response after sign-out never initiates a legacy write', async()=>{
+  const a=await casProjectPage(),{$,state}=a;
+  try {
+    state.mode='pending';$('#projectList input[type=checkbox]').click();await waitFor(()=>typeof state.resolveRpc==='function');
+    state.auth('SIGNED_OUT',null);assert.equal($('#projectList').children.length,0);
+    state.resolveRpc({error:{code:'PGRST202'}});await delay(70);
+    assert.equal(state.legacyCalls,0);assert.equal($('#projectList').children.length,0);assert.equal($('#projectConcurrencyInfo').textContent,'');
+  } finally {a.dom.window.close();}
 });

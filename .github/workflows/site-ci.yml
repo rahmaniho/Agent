@@ -43,3 +43,5 @@ jobs:
           git diff --exit-code -- site/assets/workspace.js
       - name: Test UI and local agent bridge
         run: npm test --prefix site
+      - name: Test read-only API foundation
+        run: node --test server/*.test.mjs

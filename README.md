@@ -37,3 +37,7 @@ node site/serve.mjs      # http://localhost:4173
 نسخهٔ کامل فایل‌های مخزن [Alishahryar1/free-claude-code](https://github.com/Alishahryar1/free-claude-code) در کامیت `56621010ada15b633d76ab19178764bb3e81bcc5`، به صورت snapshot داخل این مخزن قرار گرفته است. پوشهٔ Git داخلی و تاریخچه عمداً حذف شده‌اند تا فایل‌ها بخشی از همین مخزن باشند، نه یک submodule. مجوز پروژه **AGPL-3.0-only** است؛ متن کامل و اعلان حق نشر در [`free-claude-code/LICENSE`](free-claude-code/LICENSE) حفظ شده است.
 
 داشبورد فارسی در `site/` راهنمای شروع FCC را هم نمایش می‌دهد؛ خود سایت استاتیک است و سرور یا مدل را اجرا نمی‌کند. برای نصب و پیکربندی ارائه‌دهنده و اجرای ایجنت، [راهنمای رسمی FCC](https://github.com/Alishahryar1/free-claude-code#quick-start) را دنبال کنید. محدودیت‌ها و شرایط پلن رایگان بسته به ارائه‌دهنده متغیر است. از آنجا که snapshot تاریخچهٔ Git ندارد و پروژهٔ بالادستی از `hatch-vcs` برای نسخه‌گذاری استفاده می‌کند، برای نصب از سورس بهتر است از کلون مستقل مخزن بالادستی استفاده کنید.
+
+## Agent Studio 2.0 — وضعیت توسعه
+
+ممیزی و وضعیت واقعی پروژه در [`AUDIT_REPORT.md`](AUDIT_REPORT.md) و مراحل باقی‌مانده در [`IMPLEMENTATION_ROADMAP.md`](IMPLEMENTATION_ROADMAP.md) ثبت شده‌اند. مرز API مستقل و صرفاً خواندنی مرحلهٔ ۱ در [`server/README.md`](server/README.md) توضیح داده شده است؛ هنوز به سایت وصل یا مستقر نشده و آمادهٔ استفادهٔ production نیست.
