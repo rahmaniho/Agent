@@ -170,3 +170,45 @@ test('manual plan revisions enforce owner, valid DAG and atomic version precondi
   await db.query('insert into public.studio_manual_plan_revisions(project_id,user_id,revision,project_version,tasks) select $1::uuid,$2::uuid,i,1,$3::jsonb from generate_series(1,200) i',[other,B,JSON.stringify(plan)]);
   await actor(B);assert.equal((await save(other,1,200,plan)).reason,'revision_limit');assert.equal((await list()).length,200);
 });
+
+test('manual plan idempotency replays only matching committed requests within the owner project', async t=>{
+  const db=new PGlite();t.after(()=>db.close());
+  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    grant usage on schema auth to authenticated,anon; grant execute on function auth.uid() to authenticated,anon;
+    insert into auth.users values ('${A}'),('${B}');`);
+  const existing=(await readFile(new URL('../db/006_projects_review.sql',import.meta.url),'utf8')).split('alter table public.studio_purchase_requests')[0];
+  await db.exec(existing);await db.exec(await readFile(new URL('../db/011_manual_plan_revisions.sql',import.meta.url),'utf8'));
+  const id='00000000-0000-4000-8000-000000000021', other='00000000-0000-4000-8000-000000000022';
+  const key=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+  const plan=[{id:'x',title:'کار',weight:1,depends_on:[]}];
+  await db.exec(`insert into public.studio_projects(id,user_id,title,project_type) values ('${id}','${A}','A','website'),('${other}','${B}','B','website');`);
+  const actor=who=>db.exec(`reset role;set role authenticated;set request.jwt.claim.sub='${who}';`);
+  await actor(A);
+  await db.query('select * from public.studio_save_manual_plan($1::uuid,1,0,$2::jsonb)',[id,JSON.stringify(plan)]);
+  await db.exec('reset role');await db.exec(await readFile(new URL('../db/012_manual_plan_idempotency.sql',import.meta.url),'utf8'));await actor(A);
+  const save=async(pid,pv,rev,tasks,k)=>(await db.query('select * from public.studio_save_manual_plan($1::uuid,$2::integer,$3::integer,$4::jsonb,$5::uuid)',[pid,pv,rev,JSON.stringify(tasks),k])).rows[0];
+  await assert.rejects(db.query('select * from public.studio_save_manual_plan($1::uuid,1,1,$2::jsonb)',[id,JSON.stringify(plan)]),/does not exist/);
+  assert.equal((await db.query('select operation_id from public.studio_manual_plan_revisions where revision=1')).rows[0].operation_id,null);
+  await assert.rejects(save(id,1,1,plan,null),/Invalid request/);
+  const saved=await save(id,1,1,plan,key(1));assert.equal(saved.reason,'saved');assert.equal(saved.revision,2);
+  const replay=await save(id,1,1,plan,key(1));assert.equal(replay.reason,'replayed');assert.equal(replay.created_at.toISOString(),saved.created_at.toISOString());
+  for(const [pv,rev,tasks] of [[2,1,plan],[1,2,plan],[1,1,[{...plan[0],title:'other'}]]]) assert.equal((await save(id,pv,rev,tasks,key(1))).reason,'idempotency_key_conflict');
+  assert.equal((await save(id,1,1,plan,key(2))).reason,'plan_revision_conflict');
+  const next=await save(id,1,2,plan,key(2));assert.equal(next.reason,'saved');
+  await db.query('update public.studio_projects set version=2 where id=$1',[id]);
+  assert.equal((await save(id,1,1,plan,key(1))).reason,'replayed');
+  assert.equal((await save(id,1,3,plan,key(3))).reason,'project_version_conflict');
+  const simultaneous=await Promise.all([save(id,2,3,plan,key(3)),save(id,2,3,plan,key(3))]);
+  assert.deepEqual(simultaneous.map(x=>x.reason).sort(),['replayed','saved']);
+  assert.equal((await db.query('select count(*)::integer as n from public.studio_manual_plan_revisions')).rows[0].n,4);
+  await db.exec('reset role');
+  await db.query('insert into public.studio_manual_plan_revisions(project_id,user_id,revision,project_version,tasks) select $1::uuid,$2::uuid,i,2,$3::jsonb from generate_series(5,200) i',[id,A,JSON.stringify(plan)]);
+  await actor(A);assert.equal((await save(id,1,1,plan,key(1))).reason,'replayed');
+  assert.equal((await save(id,2,200,plan,key(4))).reason,'revision_limit');
+  await actor(B);assert.equal((await save(id,1,1,plan,key(1))).reason,'not_found');
+  assert.equal((await save(other,1,0,plan,key(1))).reason,'saved'); // key scope is per project
+  await actor('');await assert.rejects(save(id,1,1,plan,key(1)),/Access denied/);
+  await db.exec("reset role;set role anon;set request.jwt.claim.sub='';");await assert.rejects(save(id,1,1,plan,key(1)),/permission denied/i);
+  await actor(A);await db.query('delete from public.studio_projects where id=$1',[id]);assert.equal((await save(id,1,1,plan,key(1))).reason,'not_found');
+});

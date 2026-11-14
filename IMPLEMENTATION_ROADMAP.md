@@ -58,4 +58,8 @@ API مستقل و غیراستقرار‌یافته، جزئیات پروژهٔ 
 
 ## گام سرور — revision طرح دستی
 
-migration 011 و GET/POST آزمایشی طرح دستی، ذخیرهٔ revision داده با اعتبارسنجی مجدد DB و precondition نسخه‌ها را آماده می‌کنند. قابلیت هنوز به UI یا deployment وصل نشده و migration اجرا نشده است؛ planner واقعی، تاریخچهٔ API، idempotency، activation و workflow همچنان باقی‌اند. هم‌زمانی مستقل، مجوزهای واقعی، backup/restore و rollout امن باید جداگانه بررسی شوند؛ محدودیت مستقیم‌نویسی پروژهٔ legacy نیز باقی است.
+migration 011 و GET/POST آزمایشی طرح دستی، ذخیرهٔ revision داده با اعتبارسنجی مجدد DB و precondition نسخه‌ها را آماده می‌کنند. قابلیت هنوز به UI یا deployment وصل نشده و migration اجرا نشده است؛ planner واقعی، تاریخچهٔ API، activation و workflow همچنان باقی‌اند؛ migration 012 فقط idempotency محدودِ ذخیرهٔ موفق طرح را اضافه می‌کند. هم‌زمانی مستقل، مجوزهای واقعی، backup/restore و rollout امن باید جداگانه بررسی شوند؛ محدودیت مستقیم‌نویسی پروژهٔ legacy نیز باقی است.
+
+## گام سرور — retry صریح ذخیرهٔ طرح
+
+migration 012 جایگزین امضای RPC 011 شده و کلید UUID را برای replay موفق محدود به پروژه و عمر revision استفاده می‌کند. برای سازگاری هنگام انتشار باید نویسنده‌ها موقتاً متوقف، migration و schema cache و نسخهٔ سرویس هماهنگ شوند. خطاها memoize نمی‌شوند؛ idempotency عمومی عملیات و side effect خارجی همچنان طراحی آینده است. آزمون واقعی چند اتصال، PostgREST و restore و سیاست retention باقی است.

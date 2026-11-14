@@ -174,8 +174,13 @@ export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 50
         const body = await readRequestJson(req);
         if (body.tooLarge) return fail(413, 'request_too_large', { Connection: 'close' });
         if (body.invalid) return fail(400, 'invalid_json');
-        let proposal = body.value, expectedRevision;
+        let proposal = body.value, expectedRevision, operationId;
         if (isManualPlan) {
+          let operationHeaderCount = 0;
+          for (let i = 0; i < req.rawHeaders.length; i += 2) if (req.rawHeaders[i].toLowerCase() === 'idempotency-key') operationHeaderCount++;
+          if (operationHeaderCount !== 1 || typeof req.headers['idempotency-key'] !== 'string' || !UUID.test(req.headers['idempotency-key']))
+            return send(res, 422, { error: { code: 'invalid_plan', issue: 'idempotency_key', request_id: id } }, id);
+          operationId = req.headers['idempotency-key'].toLowerCase();
           if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal) ||
               Object.keys(proposal).some(key => !['project_version', 'expected_revision', 'tasks'].includes(key)) ||
               !Number.isSafeInteger(proposal.expected_revision) || proposal.expected_revision < 0 || proposal.expected_revision > 200)
@@ -185,14 +190,17 @@ export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 50
         }
         const validation = validatePlanProposal(proposal);
         if (!validation.valid) return send(res, 422, { error: { code: 'invalid_plan', issue: validation.issue, request_id: id } }, id);
-        if (validation.project_version !== project.version) return fail(409, 'project_version_conflict');
-        if (isValidation) return send(res, 200, { validation: { ...validation, project_id: projectId } }, id);
-        // No automatic retries: a timeout may follow a committed transaction.
+        if (isValidation) {
+          if (validation.project_version !== project.version) return fail(409, 'project_version_conflict');
+          return send(res, 200, { validation: { ...validation, project_id: projectId } }, id);
+        }
+        // The RPC checks replays before current project version, then atomically checks fresh writes.
+        // No automatic retries: the client retains the same key and payload for a deliberate retry.
         let saveResponse;
         try {
           saveResponse = await upstream('/rest/v1/rpc/studio_save_manual_plan', token, { method: 'POST', body: {
             target_project: projectId, expected_project_version: validation.project_version,
-            expected_revision: expectedRevision, tasks: proposal.tasks,
+            expected_revision: expectedRevision, tasks: proposal.tasks, operation_id: operationId,
           } });
         } catch { if (!res.destroyed) return fail(503, 'plan_save_outcome_unknown'); return; }
         if (req.aborted || res.destroyed) return;
@@ -204,13 +212,13 @@ export function createApp(config, { fetchImpl = globalThis.fetch, timeoutMs = 50
         const saved = result[0];
         if (!saved.applied) {
           if (saved.reason === 'not_found') return fail(404, 'not_found');
-          if (['project_version_conflict', 'plan_revision_conflict', 'revision_limit'].includes(saved.reason)) return fail(409, saved.reason);
+          if (['project_version_conflict', 'plan_revision_conflict', 'revision_limit', 'idempotency_key_conflict'].includes(saved.reason)) return fail(409, saved.reason);
           return fail(503, 'plan_save_outcome_unknown');
         }
-        if (saved.reason !== 'saved' || !Number.isSafeInteger(saved.revision) || saved.revision !== expectedRevision + 1 || saved.revision > 200 ||
+        if (!['saved', 'replayed'].includes(saved.reason) || !Number.isSafeInteger(saved.revision) || saved.revision !== expectedRevision + 1 || saved.revision > 200 ||
             saved.project_version !== validation.project_version || typeof saved.created_at !== 'string' || !Number.isFinite(Date.parse(saved.created_at)))
           return fail(503, 'plan_save_outcome_unknown');
-        return send(res, 201, { plan: { revision: saved.revision, project_version: saved.project_version, created_at: saved.created_at } }, id);
+        return send(res, saved.reason === 'saved' ? 201 : 200, { plan: { revision: saved.revision, project_version: saved.project_version, created_at: saved.created_at }, replayed: saved.reason === 'replayed' }, id);
       }
       // Forward the USER token, never a service-role key: PostgREST enforces RLS.
       const query = new URLSearchParams({ select: 'id,title,description,project_type,checklist,version,updated_at', order: 'updated_at.desc,id.desc', limit: '100' });

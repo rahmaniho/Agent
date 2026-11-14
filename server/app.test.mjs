@@ -220,7 +220,7 @@ function manualPlanUpstream(calls, state) {
     if(parsed.pathname==='/auth/v1/user') return json({id:who});
     if(parsed.pathname==='/rest/v1/studio_projects') {
       const id=parsed.searchParams.get('id')?.slice(3), owner=parsed.searchParams.get('user_id')?.slice(3),row=scopedProjects[id];
-      return json(row && owner===who && row.user_id===who ? [row] : []);
+      return json(row && owner===who && row.user_id===who ? [{...row,version:state.projectVersion ?? row.version}] : []);
     }
     if(parsed.pathname==='/rest/v1/studio_manual_plan_revisions') {
       if(state.badRead) return json([{...state.rows.at(-1),user_id:userB}]);
@@ -229,8 +229,15 @@ function manualPlanUpstream(calls, state) {
     if(parsed.pathname==='/rest/v1/rpc/studio_save_manual_plan') {
       state.rpcCalls++; const args=JSON.parse(init.body), last=state.rows.at(-1), revision=last?.revision || 0;
       if(state.denied) return json({},403);
+      if(state.failBeforeCommit) {state.failBeforeCommit=false; throw new Error('network lost before commit');}
+      const prior=state.rows.find(row=>row.project_id===args.target_project && row.operation_id===args.operation_id);
+      if(prior) {
+        const same=prior.user_id===who && prior.project_version===args.expected_project_version && prior.revision===args.expected_revision+1 && JSON.stringify(prior.tasks)===JSON.stringify(args.tasks);
+        return json([same ? {applied:true,reason:'replayed',revision:prior.revision,project_version:prior.project_version,created_at:prior.created_at} : {applied:false,reason:'idempotency_key_conflict'}]);
+      }
+      if(args.expected_project_version!==(state.projectVersion ?? 3)) return json([{applied:false,reason:'project_version_conflict'}]);
       if(args.expected_revision!==revision) return json([{applied:false,reason:'plan_revision_conflict',revision:null,project_version:null,created_at:null}]);
-      const row={project_id:args.target_project,user_id:who,revision:revision+1,project_version:args.expected_project_version,tasks:args.tasks,created_at:'2026-11-14T12:00:00Z'};
+      const row={project_id:args.target_project,user_id:who,revision:revision+1,project_version:args.expected_project_version,tasks:args.tasks,operation_id:args.operation_id,created_at:'2026-11-14T12:00:00Z'};
       state.rows.push(row);
       if(state.ambiguous) { state.ambiguous=false; throw new Error('network lost after commit'); }
       if(state.malformed) return json([{applied:true,reason:'saved',revision:999,project_version:3,created_at:'bad'}]);
@@ -239,7 +246,8 @@ function manualPlanUpstream(calls, state) {
     throw new Error('unexpected upstream path');
   };
 }
-const postManual=(base,id,token,body)=>fetch(`${base}/api/v1/projects/${id}/manual-plan`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify(body)});
+const keyFor=(n=0)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const postManual=(base,id,token,body,key=keyFor(Math.max(0,body.expected_revision || 0)))=>fetch(`${base}/api/v1/projects/${id}/manual-plan`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','idempotency-key':key},body:JSON.stringify(body)});
 
 test('manual plan revisions save through owner-scoped RPC and read back without exposing owner', async t=>{
   const calls=[],state={rows:[],rpcCalls:0},base=await withApp(t,manualPlanUpstream(calls,state));
@@ -247,32 +255,51 @@ test('manual plan revisions save through owner-scoped RPC and read back without 
   const body={...proposal(),expected_revision:0};const saved=await postManual(base,projectA,'token-a',body);assert.equal(saved.status,201);
   assert.deepEqual((await saved.json()).plan,{revision:1,project_version:3,created_at:'2026-11-14T12:00:00Z'});
   const rpc=calls.find(call=>call.url.pathname==='/rest/v1/rpc/studio_save_manual_plan');assert.equal(rpc.method,'POST');assert.equal(rpc.headers.authorization,'Bearer token-a');
-  assert.deepEqual(JSON.parse(rpc.body),{target_project:projectA,expected_project_version:3,expected_revision:0,tasks:body.tasks});
+  assert.deepEqual(JSON.parse(rpc.body),{target_project:projectA,expected_project_version:3,expected_revision:0,tasks:body.tasks,operation_id:keyFor(0)});
   const read=await get(`${base}/api/v1/projects/${projectA}/manual-plan`,'token-a'),result=await read.json();
   assert.equal(result.plan.revision,1);assert.deepEqual(result.plan.tasks,body.tasks);assert.equal(result.stale,false);assert.equal('user_id' in result.plan,false);
-  assert.equal((await postManual(base,projectA,'token-a',body)).status,409);assert.equal(state.rows.length,1);
+  const replay=await postManual(base,projectA,'token-a',body);assert.equal(replay.status,200);assert.equal((await replay.json()).replayed,true);assert.equal(state.rows.length,1);
   const next=await postManual(base,projectA,'token-a',{...proposal(),expected_revision:1});assert.equal(next.status,201);assert.equal(state.rows.length,2);
   assert.equal((await get(`${base}/api/v1/projects/${projectA}/manual-plan`,'token-b')).status,404);
   assert.equal((await postManual(base,projectA,'token-b',{...proposal(),expected_revision:2})).status,404);
   assert.equal(state.rpcCalls,3); // denied cross-owner calls never reach the RPC
 });
 
-test('manual plan API rejects invalid and stale writes before calling the RPC', async t=>{
+test('manual plan API rejects invalid and stale writes', async t=>{
   const calls=[],state={rows:[],rpcCalls:0},base=await withApp(t,manualPlanUpstream(calls,state));
   for(const body of [{...proposal(),expected_revision:-1},{...proposal(),expected_revision:201},{...proposal(),expected_revision:0,status:'active'},
     {...proposal(),expected_revision:0,tasks:[]},{...proposal(),expected_revision:0,project_version:2}]) {
     const response=await postManual(base,projectA,'token-a',body);assert.ok([409,422].includes(response.status));
   }
-  assert.equal(state.rpcCalls,0);
+  assert.equal(state.rpcCalls,1); // valid stale writes reach the transactional RPC
+  const missing=await fetch(`${base}/api/v1/projects/${projectA}/manual-plan`,{method:'POST',headers:{authorization:'Bearer token-a','content-type':'application/json'},body:JSON.stringify({...proposal(),expected_revision:0})});assert.equal(missing.status,422);
+  assert.equal((await missing.json()).error.issue,'idempotency_key');
+  const invalidKey=await postManual(base,projectA,'token-a',{...proposal(),expected_revision:0},'not-a-uuid');assert.equal(invalidKey.status,422);
+  const {request}=await import('node:http');
+  const duplicate=await new Promise((resolve,reject)=>{
+    const req=request(`${base}/api/v1/projects/${projectA}/manual-plan`,{method:'POST',headers:['host',new URL(base).host,'authorization','Bearer token-a','content-type','application/json','idempotency-key',keyFor(0),'idempotency-key',keyFor(1)]},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});
+    req.on('error',reject);req.end(JSON.stringify({...proposal(),expected_revision:0}));
+  });assert.equal(duplicate,422);assert.equal(state.rpcCalls,1);
   const deletion=await fetch(`${base}/api/v1/projects/${projectA}/manual-plan`,{method:'DELETE'});assert.equal(deletion.status,405);assert.equal(deletion.headers.get('allow'),'GET, POST');
 });
 
-test('manual plan save never retries an ambiguous commit and read-back reconciles it', async t=>{
+test('manual plan save has no automatic retry; same-key retry resolves an ambiguous commit', async t=>{
   const calls=[],state={rows:[],rpcCalls:0,ambiguous:true},base=await withApp(t,manualPlanUpstream(calls,state));
   const body={...proposal(),expected_revision:0}, response=await postManual(base,projectA,'token-a',body);
   assert.equal(response.status,503);assert.equal((await response.json()).error.code,'plan_save_outcome_unknown');assert.equal(state.rpcCalls,1);
   const read=await get(`${base}/api/v1/projects/${projectA}/manual-plan`,'token-a');assert.equal((await read.json()).plan.revision,1);
-  const retry=await postManual(base,projectA,'token-a',body);assert.equal(retry.status,409);assert.equal(state.rows.length,1);
+  assert.equal((await postManual(base,projectA,'token-a',{...body,expected_revision:1})).status,201);
+  state.projectVersion=4;
+  const retry=await postManual(base,projectA,'token-a',body);assert.equal(retry.status,200);assert.equal((await retry.json()).replayed,true);assert.equal(state.rows.length,2);
+  const changed=await postManual(base,projectA,'token-a',{...body,tasks:body.tasks.map((task,i)=>i===0 ? {...task,title:'changed'} : task)});assert.equal(changed.status,409);assert.equal((await changed.json()).error.code,'idempotency_key_conflict');
+});
+
+test('same-key retry after failure before commit creates exactly one revision', async t=>{
+  const state={rows:[],rpcCalls:0,failBeforeCommit:true},base=await withApp(t,manualPlanUpstream([],state));
+  const body={...proposal(),expected_revision:0};
+  assert.equal((await postManual(base,projectA,'token-a',body)).status,503);assert.equal(state.rpcCalls,1);assert.equal(state.rows.length,0);
+  const retry=await postManual(base,projectA,'token-a',body);assert.equal(retry.status,201);assert.equal((await retry.json()).replayed,false);
+  assert.equal(state.rows.length,1);assert.equal(state.rpcCalls,2);
 });
 
 test('manual plan reads valid larger revisions saved directly through the RPC', async t=>{
