@@ -1,0 +1,214 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+
+const sql=await readFile(new URL('../db/009_project_wizard_drafts.sql',import.meta.url),'utf8');
+const A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', B='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const sample={version:1,title:'طرح',description:'',type:'website',needs:['data'],plan:['مرحله'],step:2};
+
+test('project draft migration enforces owner isolation, validation and CAS including deletion/recreation', async t=>{
+  const db=new PGlite(); t.after(()=>db.close());
+  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    grant usage on schema auth to authenticated, anon; grant execute on function auth.uid() to authenticated, anon;
+    insert into auth.users values ('${A}'),('${B}');`);
+  await db.exec(sql);
+  const actor=async id=>db.exec(`reset role; set role authenticated; set request.jwt.claim.sub = '${id || ''}';`);
+  const save=async (payload,revision)=>(await db.query('select * from public.studio_save_project_draft($1::jsonb,$2::integer)',[JSON.stringify(payload),revision])).rows[0];
+  const del=async revision=>(await db.query('select * from public.studio_delete_project_draft($1::integer)',[revision])).rows[0];
+  const rows=async ()=>(await db.query('select user_id,payload,revision from public.studio_project_drafts')).rows;
+  await actor(A);
+  assert.deepEqual(await save(sample,0),{applied:true,revision:1});
+  assert.deepEqual(await save({...sample,title:'stale create'},0),{applied:false,revision:null});
+  assert.deepEqual(await save({...sample,title:'second'},1),{applied:true,revision:2});
+  assert.deepEqual(await save(sample,1),{applied:false,revision:null});
+  await assert.rejects(db.query("update public.studio_project_drafts set revision=1"),/permission denied/i);
+  await assert.rejects(db.query("delete from public.studio_project_drafts"),/permission denied/i);
+  await assert.rejects(db.query("insert into public.studio_project_drafts (user_id) values ($1)",[B]),/permission denied/i);
+  await actor(B); assert.equal((await rows()).length,0);
+  assert.deepEqual(await save({...sample,title:'user b'},0),{applied:true,revision:1});
+  assert.deepEqual((await rows()).map(row=>row.user_id),[B]);
+  assert.deepEqual(await del(2),{applied:false,revision:null});
+  await actor(A); assert.deepEqual((await rows()).map(row=>row.user_id),[A]);
+  assert.deepEqual(await del(2),{applied:true,revision:3});
+  assert.equal((await rows())[0].payload,null);
+  assert.deepEqual(await save(sample,0),{applied:false,revision:null});
+  assert.deepEqual(await save(sample,3),{applied:true,revision:4});
+  assert.deepEqual(await save({...sample,title:'stale after delete'},2),{applied:false,revision:null});
+  const invalid=[{...sample,extra:'x'},{...sample,needs:['data','data']},{...sample,needs:['admin']},{...sample,plan:Array(51).fill('x')},{...sample,plan:['x'.repeat(201)]},{...sample,step:4},{...sample,version:2},{...sample,title:'x'.repeat(121)},{...sample,type:''},{...sample,needs:'data'},null];
+  for(const value of invalid) await assert.rejects(save(value,4),/Invalid draft/);
+  assert.equal((await rows())[0].revision,4);
+  // Legacy v1 browser drafts without plan and step remain valid.
+  assert.deepEqual(await save({version:1,title:'',description:'',type:'website',needs:[]},4),{applied:true,revision:5});
+  const simultaneous=await Promise.all([save({...sample,title:'device one'},5),save({...sample,title:'device two'},5)]);
+  assert.equal(simultaneous.filter(result=>result.applied).length,1);
+  assert.equal((await rows())[0].revision,6);
+  await assert.rejects(db.query('select public.studio_project_draft_valid($1::jsonb)',[JSON.stringify(sample)]),/permission denied/i);
+  await actor(''); await assert.rejects(save(sample,0),/Access denied/); assert.deepEqual(await rows(),[]);
+  await db.exec("reset role; set role anon; set request.jwt.claim.sub = ''; ");
+  await assert.rejects(save(sample,0),/permission denied/i);
+  await assert.rejects(db.query('select * from public.studio_project_drafts'),/permission denied/i);
+});
+
+test('existing project RLS and keyset predicate page equal microsecond timestamps without gaps', async t=>{
+  const db=new PGlite(); t.after(()=>db.close());
+  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;
+    insert into auth.users values ('${A}'),('${B}');`);
+  const existing=(await readFile(new URL('../db/006_projects_review.sql',import.meta.url),'utf8')).split('alter table public.studio_purchase_requests')[0];
+  await db.exec(existing);
+  await db.exec(`insert into public.studio_projects (id,user_id,title,project_type,updated_at)
+    select ('00000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'${A}','test','website','2026-11-13T18:19:20.123456+00:00'::timestamptz from generate_series(1,205) i;
+    insert into public.studio_projects (user_id,title,project_type) values ('${B}','other','website');
+    set role authenticated; set request.jwt.claim.sub='${A}';`);
+  let cursor=null, ids=[];
+  for(let page=0;page<3;page++) {
+    const result=await db.query(`select id, to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"+00:00"') as stamp from public.studio_projects
+      where ($1::timestamptz is null or updated_at<$1::timestamptz or (updated_at=$1::timestamptz and id<$2::uuid))
+      order by updated_at desc,id desc limit 100`,[cursor?.stamp || null,cursor?.id || null]);
+    ids.push(...result.rows.map(row=>row.id)); cursor=result.rows.at(-1); assert.equal(result.rows.length,page===2?5:100);
+    assert.equal(cursor.stamp,'2026-11-13T18:19:20.123456+00:00');
+  }
+  assert.equal(ids.length,205); assert.equal(new Set(ids).size,205);
+});
+
+test('Supabase query builder encodes the compound cursor safely and preserves timestamp precision', async ()=>{
+  const {createClient}=await import('@supabase/supabase-js'); let captured;
+  const client=createClient('https://example.supabase.co','sb_publishable_example',{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:async url=>{captured=new URL(url);return new Response('[]',{status:200,headers:{'content-type':'application/json'}});}}});
+  const filter='updated_at.lt."2026-11-13T18:19:20.123456+00:00",and(updated_at.eq."2026-11-13T18:19:20.123456+00:00",id.lt.00000000-0000-4000-8000-000000000010)';
+  const {error}=await client.from('studio_projects').select('id,updated_at').order('updated_at',{ascending:false}).order('id',{ascending:false}).or(filter).limit(100);
+  assert.equal(error,null); assert.equal(captured.searchParams.get('or'),`(${filter})`);
+  assert.equal(captured.searchParams.get('order'),'updated_at.desc,id.desc'); assert.equal(captured.searchParams.get('limit'),'100');
+});
+
+test('additive project CAS RPC enforces ownership, valid patches and atomic expected version', async t=>{
+  const db=new PGlite();t.after(()=>db.close());
+  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    grant usage on schema auth to authenticated,anon; grant execute on function auth.uid() to authenticated,anon;
+    insert into auth.users values ('${A}'),('${B}');`);
+  const existing=(await readFile(new URL('../db/006_projects_review.sql',import.meta.url),'utf8')).split('alter table public.studio_purchase_requests')[0];
+  await db.exec(existing);await db.exec(await readFile(new URL('../db/010_project_update_cas.sql',import.meta.url),'utf8'));
+  const id='00000000-0000-4000-8000-000000000001',other='00000000-0000-4000-8000-000000000002';
+  await db.exec(`insert into public.studio_projects(id,user_id,title,description,project_type,checklist) values
+    ('${id}','${A}','Original','','website','[{"legacy":"value"}]'),('${other}','${B}','Private','','website','[]');`);
+  const actor=async who=>db.exec(`reset role; set role authenticated; set request.jwt.claim.sub='${who}';`);
+  const update=async (id,version,patch)=>(await db.query('select * from public.studio_update_project_cas($1::uuid,$2::integer,$3::jsonb)',[id,version,JSON.stringify(patch)])).rows[0];
+  await actor(A);
+  const first=await update(id,1,{title:'Updated'});assert.equal(first.applied,true);assert.equal(first.new_version,2);assert.ok(first.updated_at);
+  assert.deepEqual(await update(id,1,{title:'Stale'}),{applied:false,new_version:null,updated_at:null});
+  assert.deepEqual(await update(other,1,{title:'Intrusion'}),{applied:false,new_version:null,updated_at:null});
+  // Existing checklist formats are preserved; partial patches do not rewrite them.
+  assert.deepEqual((await db.query('select checklist from public.studio_projects where id=$1',[id])).rows[0].checklist,[{legacy:'value'}]);
+  for(const bad of [{},{user_id:B},{version:99},{updated_at:'2100-01-01'},{title:''},{title:null},{title:' '.repeat(40001)+'x'},{description:null},{project_type:''},{checklist:{}},{checklist:Array(51).fill('x')}])
+    await assert.rejects(update(id,2,bad),/Invalid update/);
+  const outcomes=await Promise.all([update(id,2,{description:'one'}),update(id,2,{description:'two'})]);
+  assert.equal(outcomes.filter(row=>row.applied).length,1);
+  assert.equal((await db.query('select version from public.studio_projects where id=$1',[id])).rows[0].version,3);
+  await actor(B);assert.deepEqual(await update(id,3,{title:'Cross-user'}),{applied:false,new_version:null,updated_at:null});
+  await actor('');await assert.rejects(update(id,3,{title:'No identity'}),/Access denied/);
+  await db.exec("reset role; set role anon; set request.jwt.claim.sub='';");
+  await assert.rejects(update(id,3,{title:'Anon'}),/permission denied/i);
+  // Legacy UPDATE remains granted for compatibility, and is NOT server-enforced CAS.
+  await actor(A); await db.query('update public.studio_projects set description=$1 where id=$2',['legacy writer',id]);
+  assert.equal((await db.query('select description from public.studio_projects where id=$1',[id])).rows[0].description,'legacy writer');
+});
+
+test('manual plan revisions enforce owner, valid DAG and atomic version preconditions', async t=>{
+  const db=new PGlite();t.after(()=>db.close());
+  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    grant usage on schema auth to authenticated,anon; grant execute on function auth.uid() to authenticated,anon;
+    insert into auth.users values ('${A}'),('${B}');`);
+  const existing=(await readFile(new URL('../db/006_projects_review.sql',import.meta.url),'utf8')).split('alter table public.studio_purchase_requests')[0];
+  await db.exec(existing);await db.exec(await readFile(new URL('../db/011_manual_plan_revisions.sql',import.meta.url),'utf8'));
+  const id='00000000-0000-4000-8000-000000000011', other='00000000-0000-4000-8000-000000000012';
+  await db.exec(`insert into public.studio_projects(id,user_id,title,project_type) values ('${id}','${A}','A','website'),('${other}','${B}','B','website');`);
+  const actor=async who=>db.exec(`reset role;set role authenticated;set request.jwt.claim.sub='${who}';`);
+  const save=async (pid,pv,rev,tasks)=>(await db.query('select * from public.studio_save_manual_plan($1::uuid,$2::integer,$3::integer,$4::jsonb)',[pid,pv,rev,JSON.stringify(tasks)])).rows[0];
+  const list=async ()=>(await db.query('select project_id,user_id,revision,project_version,tasks from public.studio_manual_plan_revisions order by revision')).rows;
+  const plan=[{id:'build',title:'ساخت',weight:3,depends_on:['design']},{id:'design',title:'طراحی',weight:1,depends_on:[]}];
+  const {validatePlanProposal}=await import('../../server/plan-validation.mjs');
+  for(const tasks of [plan,[{id:'x',title:'😀'.repeat(100),weight:1,depends_on:[]}],
+    [{id:'x',title:'😀'.repeat(101),weight:1,depends_on:[]}],[{id:'x',title:'\u00a0',weight:1,depends_on:[]}],
+    [{id:'x',title:'x',weight:1,depends_on:['x']}],[]]) {
+    const sqlResult=await db.query('select public.studio_manual_plan_tasks_valid($1::jsonb) as valid',[JSON.stringify(tasks)]);
+    assert.equal(sqlResult.rows[0].valid,validatePlanProposal({project_version:1,tasks}).valid);
+  }
+  // Direct RPC accepts a valid JSONB document larger than the API's conservative write cap.
+  const large=[];for(let i=0;i<100;i++) large.push({id:'t'+String(i).padStart(2,'0')+'_'.repeat(27),title:'x'.repeat(160),weight:1,depends_on:large.slice(-11).map(t=>t.id)});
+  assert.ok(Buffer.byteLength(JSON.stringify(large))>55000);
+  assert.equal((await db.query('select public.studio_manual_plan_tasks_valid($1::jsonb) as valid',[JSON.stringify(large)])).rows[0].valid,true);
+  assert.equal(validatePlanProposal({project_version:1,tasks:large}).valid,false);
+  assert.equal(validatePlanProposal({project_version:1,tasks:large},{stored:true}).valid,true);
+  await actor(A);
+  assert.equal((await save(other,1,0,plan)).reason,'not_found');assert.equal((await list()).length,0);
+  const invalid=[[],[{...plan[0],status:'done'}],[{...plan[0],weight:0}], [{...plan[0],weight:1.5}],
+    [{...plan[0],depends_on:['build']}],[{...plan[0],depends_on:['missing']}],
+    [{...plan[0],depends_on:['design','design']},plan[1]],[{...plan[0]}, {...plan[1],depends_on:['build']}],
+    [plan[0],{...plan[1],id:'build'}],[{...plan[0],title:' \n\t'}],
+    [{id:'x',title:'\u00a0',weight:1,depends_on:[]}], [{id:'x',title:'😀'.repeat(101),weight:1,depends_on:[]}],Array(101).fill(plan[0])];
+  for(const bad of invalid) await assert.rejects(save(id,1,0,bad),/Invalid plan/);
+  const created=await save(id,1,0,plan);assert.equal(created.applied,true);assert.equal(created.revision,1);assert.equal(created.project_version,1);
+  assert.equal((await save(id,1,0,plan)).reason,'plan_revision_conflict');
+  await assert.rejects(db.query('update public.studio_manual_plan_revisions set tasks=$1',[JSON.stringify([])]),/permission denied/i);
+  await assert.rejects(db.query('delete from public.studio_manual_plan_revisions'),/permission denied/i);
+  await assert.rejects(db.query('insert into public.studio_manual_plan_revisions(project_id,user_id,revision,project_version,tasks) values ($1,$2,2,1,$3::jsonb)',[id,A,JSON.stringify(plan)]),/permission denied/i);
+  await actor(B);assert.equal((await list()).length,0);assert.equal((await save(id,1,1,plan)).reason,'not_found');
+  await actor(A); await db.query('update public.studio_projects set version=2 where id=$1',[id]);
+  assert.equal((await save(id,1,1,plan)).reason,'project_version_conflict');
+  const simultaneous=await Promise.all([save(id,2,1,plan),save(id,2,1,plan)]);assert.equal(simultaneous.filter(row=>row.applied).length,1);
+  assert.equal(simultaneous.filter(row=>row.reason==='plan_revision_conflict').length,1);
+  const rows=await list();assert.equal(rows.length,2);assert.equal(rows[0].project_version,1);assert.equal(rows[1].project_version,2);assert.deepEqual(rows[0].tasks,plan);
+  await assert.rejects(db.query('select public.studio_manual_plan_tasks_valid($1::jsonb)',[JSON.stringify(plan)]),/permission denied/i);
+  await actor('');await assert.rejects(save(id,2,2,plan),/Access denied/);assert.equal((await list()).length,0);
+  await db.exec("reset role;set role anon;set request.jwt.claim.sub='';");await assert.rejects(save(id,2,2,plan),/permission denied/i);
+  await actor(A);await db.query('delete from public.studio_projects where id=$1',[id]);assert.equal((await list()).length,0);
+  await db.exec('reset role');
+  await db.query('insert into public.studio_manual_plan_revisions(project_id,user_id,revision,project_version,tasks) select $1::uuid,$2::uuid,i,1,$3::jsonb from generate_series(1,200) i',[other,B,JSON.stringify(plan)]);
+  await actor(B);assert.equal((await save(other,1,200,plan)).reason,'revision_limit');assert.equal((await list()).length,200);
+});
+
+test('manual plan idempotency replays only matching committed requests within the owner project', async t=>{
+  const db=new PGlite();t.after(()=>db.close());
+  await db.exec(`create role anon; create role authenticated; create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    grant usage on schema auth to authenticated,anon; grant execute on function auth.uid() to authenticated,anon;
+    insert into auth.users values ('${A}'),('${B}');`);
+  const existing=(await readFile(new URL('../db/006_projects_review.sql',import.meta.url),'utf8')).split('alter table public.studio_purchase_requests')[0];
+  await db.exec(existing);await db.exec(await readFile(new URL('../db/011_manual_plan_revisions.sql',import.meta.url),'utf8'));
+  const id='00000000-0000-4000-8000-000000000021', other='00000000-0000-4000-8000-000000000022';
+  const key=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+  const plan=[{id:'x',title:'کار',weight:1,depends_on:[]}];
+  await db.exec(`insert into public.studio_projects(id,user_id,title,project_type) values ('${id}','${A}','A','website'),('${other}','${B}','B','website');`);
+  const actor=who=>db.exec(`reset role;set role authenticated;set request.jwt.claim.sub='${who}';`);
+  await actor(A);
+  await db.query('select * from public.studio_save_manual_plan($1::uuid,1,0,$2::jsonb)',[id,JSON.stringify(plan)]);
+  await db.exec('reset role');await db.exec(await readFile(new URL('../db/012_manual_plan_idempotency.sql',import.meta.url),'utf8'));await actor(A);
+  const save=async(pid,pv,rev,tasks,k)=>(await db.query('select * from public.studio_save_manual_plan($1::uuid,$2::integer,$3::integer,$4::jsonb,$5::uuid)',[pid,pv,rev,JSON.stringify(tasks),k])).rows[0];
+  await assert.rejects(db.query('select * from public.studio_save_manual_plan($1::uuid,1,1,$2::jsonb)',[id,JSON.stringify(plan)]),/does not exist/);
+  assert.equal((await db.query('select operation_id from public.studio_manual_plan_revisions where revision=1')).rows[0].operation_id,null);
+  await assert.rejects(save(id,1,1,plan,null),/Invalid request/);
+  const saved=await save(id,1,1,plan,key(1));assert.equal(saved.reason,'saved');assert.equal(saved.revision,2);
+  const replay=await save(id,1,1,plan,key(1));assert.equal(replay.reason,'replayed');assert.equal(replay.created_at.toISOString(),saved.created_at.toISOString());
+  for(const [pv,rev,tasks] of [[2,1,plan],[1,2,plan],[1,1,[{...plan[0],title:'other'}]]]) assert.equal((await save(id,pv,rev,tasks,key(1))).reason,'idempotency_key_conflict');
+  assert.equal((await save(id,1,1,plan,key(2))).reason,'plan_revision_conflict');
+  const next=await save(id,1,2,plan,key(2));assert.equal(next.reason,'saved');
+  await db.query('update public.studio_projects set version=2 where id=$1',[id]);
+  assert.equal((await save(id,1,1,plan,key(1))).reason,'replayed');
+  assert.equal((await save(id,1,3,plan,key(3))).reason,'project_version_conflict');
+  const simultaneous=await Promise.all([save(id,2,3,plan,key(3)),save(id,2,3,plan,key(3))]);
+  assert.deepEqual(simultaneous.map(x=>x.reason).sort(),['replayed','saved']);
+  assert.equal((await db.query('select count(*)::integer as n from public.studio_manual_plan_revisions')).rows[0].n,4);
+  await db.exec('reset role');
+  await db.query('insert into public.studio_manual_plan_revisions(project_id,user_id,revision,project_version,tasks) select $1::uuid,$2::uuid,i,2,$3::jsonb from generate_series(5,200) i',[id,A,JSON.stringify(plan)]);
+  await actor(A);assert.equal((await save(id,1,1,plan,key(1))).reason,'replayed');
+  assert.equal((await save(id,2,200,plan,key(4))).reason,'revision_limit');
+  await actor(B);assert.equal((await save(id,1,1,plan,key(1))).reason,'not_found');
+  assert.equal((await save(other,1,0,plan,key(1))).reason,'saved'); // key scope is per project
+  await actor('');await assert.rejects(save(id,1,1,plan,key(1)),/Access denied/);
+  await db.exec("reset role;set role anon;set request.jwt.claim.sub='';");await assert.rejects(save(id,1,1,plan,key(1)),/permission denied/i);
+  await actor(A);await db.query('delete from public.studio_projects where id=$1',[id]);assert.equal((await save(id,1,1,plan,key(1))).reason,'not_found');
+});
